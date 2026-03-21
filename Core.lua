@@ -60,6 +60,36 @@ function CursorGlow:OnInitialize()
             miningSizeY = 70,
             miningOffsetX = 13.5,
             miningOffsetY = -16,
+
+            -- FLIGHTMASTER
+            flightMasterSizeX = 70,
+            flightMasterSizeY = 70,
+            flightMasterOffsetX = 16,
+            flightMasterOffsetY = -16,
+
+            -- BATTLEMASTER
+            battlemasterSizeX = 69,
+            battlemasterSizeY = 70,
+            battlemasterOffsetX = 16,
+            battlemasterOffsetY = -16,
+
+            -- TRAINER
+            trainerSizeX = 70,
+            trainerSizeY = 69,
+            trainerOffsetX = 16,
+            trainerOffsetY = -16,
+
+            -- DIRECTIONS GUARD
+            directionsGuardSizeX = 69,
+            directionsGuardSizeY = 68,
+            directionsGuardOffsetX = 16,
+            directionsGuardOffsetY = -16,
+
+            -- INNKEEPER
+            innkeeperSizeX = 66,
+            innkeeperSizeY = 66,
+            innkeeperOffsetX = 16,
+            innkeeperOffsetY = -16,
         }
     })
 

@@ -203,6 +203,71 @@ local function BuildOptions(self)
                             p().miningOffsetY = -16
                         end
                     ),
+
+                    flightmaster = makeGroup("Flight Master", 7,
+                        function(v) if v then p().flightMasterSizeX = v end return p().flightMasterSizeX end,
+                        function(v) if v then p().flightMasterSizeY = v end return p().flightMasterSizeY end,
+                        function(v) if v then p().flightMasterOffsetX = v end return p().flightMasterOffsetX end,
+                        function(v) if v then p().flightMasterOffsetY = v end return p().flightMasterOffsetY end,
+                        function()
+                            p().flightMasterSizeX = 70
+                            p().flightMasterSizeY = 70
+                            p().flightMasterOffsetX = 16
+                            p().flightMasterOffsetY = -16
+                        end
+                    ),
+
+                    battlemaster = makeGroup("Battlemaster", 8,
+                        function(v) if v then p().battlemasterSizeX = v end return p().battlemasterSizeX end,
+                        function(v) if v then p().battlemasterSizeY = v end return p().battlemasterSizeY end,
+                        function(v) if v then p().battlemasterOffsetX = v end return p().battlemasterOffsetX end,
+                        function(v) if v then p().battlemasterOffsetY = v end return p().battlemasterOffsetY end,
+                        function()
+                            p().battlemasterSizeX = 69
+                            p().battlemasterSizeY = 70
+                            p().battlemasterOffsetX = 16
+                            p().battlemasterOffsetY = -16
+                        end
+                    ),
+
+                    trainer = makeGroup("Trainer", 9,
+                        function(v) if v then p().trainerSizeX = v end return p().trainerSizeX end,
+                        function(v) if v then p().trainerSizeY = v end return p().trainerSizeY end,
+                        function(v) if v then p().trainerOffsetX = v end return p().trainerOffsetX end,
+                        function(v) if v then p().trainerOffsetY = v end return p().trainerOffsetY end,
+                        function()
+                            p().trainerSizeX = 70
+                            p().trainerSizeY = 69
+                            p().trainerOffsetX = 16
+                            p().trainerOffsetY = -16
+                        end
+                    ),
+
+                    directionsGuard = makeGroup("Directions Guard", 10,
+                        function(v) if v then p().directionsGuardSizeX = v end return p().directionsGuardSizeX end,
+                        function(v) if v then p().directionsGuardSizeY = v end return p().directionsGuardSizeY end,
+                        function(v) if v then p().directionsGuardOffsetX = v end return p().directionsGuardOffsetX end,
+                        function(v) if v then p().directionsGuardOffsetY = v end return p().directionsGuardOffsetY end,
+                        function()
+                            p().directionsGuardSizeX = 69
+                            p().directionsGuardSizeY = 68
+                            p().directionsGuardOffsetX = 16
+                            p().directionsGuardOffsetY = -16
+                        end
+                    ),
+
+                    innkeeper = makeGroup("Innkeeper", 11,
+                        function(v) if v then p().innkeeperSizeX = v end return p().innkeeperSizeX end,
+                        function(v) if v then p().innkeeperSizeY = v end return p().innkeeperSizeY end,
+                        function(v) if v then p().innkeeperOffsetX = v end return p().innkeeperOffsetX end,
+                        function(v) if v then p().innkeeperOffsetY = v end return p().innkeeperOffsetY end,
+                        function()
+                            p().innkeeperSizeX = 66
+                            p().innkeeperSizeY = 66
+                            p().innkeeperOffsetX = 16
+                            p().innkeeperOffsetY = -16
+                        end
+                    ),
                 },
             },
         },

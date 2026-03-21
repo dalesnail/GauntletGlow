@@ -32,7 +32,8 @@ States.lua
 Data\Core.lua
 Data\Gathering\Herbalism.lua
 Data\Gathering\Mining.lua
-Data\NPCs\FlightMasters.lua
+Data/NPCs/TooltipRoles.lua
+Data/NPCs/FlightMasters.lua
 
 # --------------------------------------------------
 # MODULES

@@ -62,6 +62,36 @@ function CursorGlow:ApplyState(stateName, force)
         offsetX = self.db.profile.miningOffsetX or offsetX
         offsetY = self.db.profile.miningOffsetY or offsetY
 
+    elseif stateName == "FLIGHTMASTER" then
+        sizeX = self.db.profile.flightMasterSizeX or sizeX
+        sizeY = self.db.profile.flightMasterSizeY or sizeY
+        offsetX = self.db.profile.flightMasterOffsetX or offsetX
+        offsetY = self.db.profile.flightMasterOffsetY or offsetY
+
+    elseif stateName == "BATTLEMASTER" then
+        sizeX = self.db.profile.battlemasterSizeX or sizeX
+        sizeY = self.db.profile.battlemasterSizeY or sizeY
+        offsetX = self.db.profile.battlemasterOffsetX or offsetX
+        offsetY = self.db.profile.battlemasterOffsetY or offsetY
+
+    elseif stateName == "TRAINER" then
+        sizeX = self.db.profile.trainerSizeX or sizeX
+        sizeY = self.db.profile.trainerSizeY or sizeY
+        offsetX = self.db.profile.trainerOffsetX or offsetX
+        offsetY = self.db.profile.trainerOffsetY or offsetY
+
+    elseif stateName == "DIRECTIONS_GUARD" then
+        sizeX = self.db.profile.directionsGuardSizeX or sizeX
+        sizeY = self.db.profile.directionsGuardSizeY or sizeY
+        offsetX = self.db.profile.directionsGuardOffsetX or offsetX
+        offsetY = self.db.profile.directionsGuardOffsetY or offsetY
+
+    elseif stateName == "INNKEEPER" then
+        sizeX = self.db.profile.innkeeperSizeX or sizeX
+        sizeY = self.db.profile.innkeeperSizeY or sizeY
+        offsetX = self.db.profile.innkeeperOffsetX or offsetX
+        offsetY = self.db.profile.innkeeperOffsetY or offsetY
+
     else
         sizeX = self.db.profile.sizeX or sizeX
         sizeY = self.db.profile.sizeY or sizeY

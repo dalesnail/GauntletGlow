@@ -21,6 +21,63 @@ local GetTime = GetTime
 local Tooltip = ns.Tooltip
 local Data = ns.Data
 
+local function HasTooltipRole(lines, category)
+    local roleData = Data and Data["TOOLTIP_ROLE_KEYWORDS"]
+    local categoryData = roleData and roleData[category]
+    if not categoryData or not lines then
+        return false
+    end
+
+    for _, line in ipairs(lines) do
+        if categoryData.exact and categoryData.exact[line] then
+            return true
+        end
+
+        if categoryData.contains then
+            for _, keyword in ipairs(categoryData.contains) do
+                if strfind(line, keyword, 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function IsFlightMasterName(name)
+    if not name or not Data then
+        return false
+    end
+
+    local flightMasters = Data["FLIGHTMASTERS"] or Data["FLIGHTMASTER"]
+    return flightMasters and flightMasters[name] or false
+end
+
+local function AddTooltipRoleCandidates(candidates, lines, name)
+    if HasTooltipRole(lines, "FLIGHTMASTER") then
+        table.insert(candidates, "FLIGHTMASTER")
+    elseif IsFlightMasterName(name) then
+        table.insert(candidates, "FLIGHTMASTER")
+    end
+
+    if HasTooltipRole(lines, "BATTLEMASTER") then
+        table.insert(candidates, "BATTLEMASTER")
+    end
+
+    if HasTooltipRole(lines, "TRAINER") then
+        table.insert(candidates, "TRAINER")
+    end
+
+    if HasTooltipRole(lines, "DIRECTIONS_GUARD") then
+        table.insert(candidates, "DIRECTIONS_GUARD")
+    end
+
+    if HasTooltipRole(lines, "INNKEEPER") then
+        table.insert(candidates, "INNKEEPER")
+    end
+end
+
 -- ############################################################
 -- TRIGGER LOOP
 -- ############################################################
@@ -80,6 +137,8 @@ function CursorGlow:EvaluateTrigger()
     local candidates = {}
 
     local name = Tooltip and Tooltip:GetName()
+    local lines = Tooltip and Tooltip:GetLines()
+
     if name then
         name = strtrim(name)
     end
@@ -92,11 +151,9 @@ function CursorGlow:EvaluateTrigger()
         if Data["MINING"] and Data["MINING"][name] then
             table.insert(candidates, "MINING")
         end
-
-        if name and Data["FLIGHTMASTER"] and Data["FLIGHTMASTER"][name] then
-            return "FLIGHTMASTER"
-        end
     end
+
+    AddTooltipRoleCandidates(candidates, lines, name)
 
     if UnitExists("mouseover") and not UnitIsUnit("mouseover", "player") then
         local guid = UnitGUID("mouseover")
@@ -123,24 +180,12 @@ function CursorGlow:EvaluateTrigger()
             end
         end
 
-        if UnitIsPlayer("mouseover") then
-            if UnitCanAttack("player", "mouseover") then
-                table.insert(candidates, "ATTACK")
-            else
-                table.insert(candidates, "DEFAULT")
-            end
-        end
-
         -- ATTACK (only if alive)
         if UnitExists("mouseover")
             and not UnitIsDeadOrGhost("mouseover")
             and UnitCanAttack("player", "mouseover") then
             
             table.insert(candidates, "ATTACK")
-        end
-
-        if UnitIsFriend("player", "mouseover") then
-            return false
         end
     end
 

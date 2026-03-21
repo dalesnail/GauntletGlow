@@ -1,13 +1,14 @@
 local ADDON_NAME, ns = ...
 
 ns.Data = ns.Data or {}
+
 ns.Data["FLIGHTMASTER"] = {
 
+    -- Keep usage of this file to a minimum for edge cases of no detection
     -- CLASSIC
     ["Dungar Longdrink"] = true,
     ["Gryth Thurden"] = true,
     ["Thor"] = true,
-    ["Lanie Reed"] = true,
     ["Shellei Brondir"] = true,
     ["Borgus Stoutarm"] = true,
     ["Karos Razok"] = true,
