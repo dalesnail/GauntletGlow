@@ -249,10 +249,10 @@ local function BuildOptions(self)
                         function(v) if v then p().directionsGuardOffsetX = v end return p().directionsGuardOffsetX end,
                         function(v) if v then p().directionsGuardOffsetY = v end return p().directionsGuardOffsetY end,
                         function()
-                            p().directionsGuardSizeX = 69
-                            p().directionsGuardSizeY = 68
-                            p().directionsGuardOffsetX = 16
-                            p().directionsGuardOffsetY = -16
+                            p().directionsGuardSizeX = 68
+                            p().directionsGuardSizeY = 69
+                            p().directionsGuardOffsetX = 15.5
+                            p().directionsGuardOffsetY = -15
                         end
                     ),
 
@@ -264,8 +264,73 @@ local function BuildOptions(self)
                         function()
                             p().innkeeperSizeX = 66
                             p().innkeeperSizeY = 66
-                            p().innkeeperOffsetX = 16
-                            p().innkeeperOffsetY = -16
+                            p().innkeeperOffsetX = 14
+                            p().innkeeperOffsetY = -14
+                        end
+                    ),
+
+                    stablemaster = makeGroup("Stable Master", 12,
+                        function(v) if v then p().stableMasterSizeX = v end return p().stableMasterSizeX end,
+                        function(v) if v then p().stableMasterSizeY = v end return p().stableMasterSizeY end,
+                        function(v) if v then p().stableMasterOffsetX = v end return p().stableMasterOffsetX end,
+                        function(v) if v then p().stableMasterOffsetY = v end return p().stableMasterOffsetY end,
+                        function()
+                            p().stableMasterSizeX = 69
+                            p().stableMasterSizeY = 69
+                            p().stableMasterOffsetX = 15.5
+                            p().stableMasterOffsetY = -15.5
+                        end
+                    ),
+
+                    mailbox = makeGroup("Mailbox", 13,
+                        function(v) if v then p().mailboxSizeX = v end return p().mailboxSizeX end,
+                        function(v) if v then p().mailboxSizeY = v end return p().mailboxSizeY end,
+                        function(v) if v then p().mailboxOffsetX = v end return p().mailboxOffsetX end,
+                        function(v) if v then p().mailboxOffsetY = v end return p().mailboxOffsetY end,
+                        function()
+                            p().mailboxSizeX = 70
+                            p().mailboxSizeY = 65
+                            p().mailboxOffsetX = 16
+                            p().mailboxOffsetY = -13.5
+                        end
+                    ),
+
+                    skinnable = makeGroup("Skinnable", 14,
+                        function(v) if v then p().skinnableSizeX = v end return p().skinnableSizeX end,
+                        function(v) if v then p().skinnableSizeY = v end return p().skinnableSizeY end,
+                        function(v) if v then p().skinnableOffsetX = v end return p().skinnableOffsetX end,
+                        function(v) if v then p().skinnableOffsetY = v end return p().skinnableOffsetY end,
+                        function()
+                            p().skinnableSizeX = 69
+                            p().skinnableSizeY = 66
+                            p().skinnableOffsetX = 16
+                            p().skinnableOffsetY = -16
+                        end
+                    ),
+
+                    vendor = makeGroup("Vendor", 15,
+                        function(v) if v then p().vendorSizeX = v end return p().vendorSizeX end,
+                        function(v) if v then p().vendorSizeY = v end return p().vendorSizeY end,
+                        function(v) if v then p().vendorOffsetX = v end return p().vendorOffsetX end,
+                        function(v) if v then p().vendorOffsetY = v end return p().vendorOffsetY end,
+                        function()
+                            p().vendorSizeX = 64
+                            p().vendorSizeY = 64
+                            p().vendorOffsetX = 13
+                            p().vendorOffsetY = -13
+                        end
+                    ),
+
+                    repairVendor = makeGroup("Repair Vendor", 16,
+                        function(v) if v then p().repairVendorSizeX = v end return p().repairVendorSizeX end,
+                        function(v) if v then p().repairVendorSizeY = v end return p().repairVendorSizeY end,
+                        function(v) if v then p().repairVendorOffsetX = v end return p().repairVendorOffsetX end,
+                        function(v) if v then p().repairVendorOffsetY = v end return p().repairVendorOffsetY end,
+                        function()
+                            p().repairVendorSizeX = 67
+                            p().repairVendorSizeY = 68
+                            p().repairVendorOffsetX = 14.5
+                            p().repairVendorOffsetY = -15
                         end
                     ),
                 },

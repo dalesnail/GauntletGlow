@@ -74,22 +74,52 @@ function CursorGlow:OnInitialize()
             battlemasterOffsetY = -16,
 
             -- TRAINER
-            trainerSizeX = 70,
-            trainerSizeY = 69,
+            trainerSizeX = 69,
+            trainerSizeY = 70,
             trainerOffsetX = 16,
-            trainerOffsetY = -16,
+            trainerOffsetY = -15.5,
 
             -- DIRECTIONS GUARD
-            directionsGuardSizeX = 69,
-            directionsGuardSizeY = 68,
-            directionsGuardOffsetX = 16,
-            directionsGuardOffsetY = -16,
+            directionsGuardSizeX = 68,
+            directionsGuardSizeY = 69,
+            directionsGuardOffsetX = 15.5,
+            directionsGuardOffsetY = -15,
 
             -- INNKEEPER
             innkeeperSizeX = 66,
             innkeeperSizeY = 66,
-            innkeeperOffsetX = 16,
-            innkeeperOffsetY = -16,
+            innkeeperOffsetX = 14,
+            innkeeperOffsetY = -14,
+
+            -- STABLEMASTER
+            stableMasterSizeX = 69,
+            stableMasterSizeY = 69,
+            stableMasterOffsetX = 15.5,
+            stableMasterOffsetY = -15.5,
+
+            -- MAILBOX
+            mailboxSizeX = 70,
+            mailboxSizeY = 65,
+            mailboxOffsetX = 16,
+            mailboxOffsetY = -13.5,
+
+            -- SKINNABLE
+            skinnableSizeX = 69,
+            skinnableSizeY = 66,
+            skinnableOffsetX = 16,
+            skinnableOffsetY = -16,
+
+            -- VENDOR
+            vendorSizeX = 64,
+            vendorSizeY = 64,
+            vendorOffsetX = 13,
+            vendorOffsetY = -13,
+
+            -- REPAIR VENDOR
+            repairVendorSizeX = 67,
+            repairVendorSizeY = 68,
+            repairVendorOffsetX = 14.5,
+            repairVendorOffsetY = -15,
         }
     })
 

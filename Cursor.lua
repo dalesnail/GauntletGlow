@@ -92,6 +92,36 @@ function CursorGlow:ApplyState(stateName, force)
         offsetX = self.db.profile.innkeeperOffsetX or offsetX
         offsetY = self.db.profile.innkeeperOffsetY or offsetY
 
+    elseif stateName == "STABLEMASTER" then
+        sizeX = self.db.profile.stableMasterSizeX or sizeX
+        sizeY = self.db.profile.stableMasterSizeY or sizeY
+        offsetX = self.db.profile.stableMasterOffsetX or offsetX
+        offsetY = self.db.profile.stableMasterOffsetY or offsetY
+
+    elseif stateName == "MAILBOX" then
+        sizeX = self.db.profile.mailboxSizeX or sizeX
+        sizeY = self.db.profile.mailboxSizeY or sizeY
+        offsetX = self.db.profile.mailboxOffsetX or offsetX
+        offsetY = self.db.profile.mailboxOffsetY or offsetY
+
+    elseif stateName == "SKINNABLE" then
+        sizeX = self.db.profile.skinnableSizeX or sizeX
+        sizeY = self.db.profile.skinnableSizeY or sizeY
+        offsetX = self.db.profile.skinnableOffsetX or offsetX
+        offsetY = self.db.profile.skinnableOffsetY or offsetY
+
+    elseif stateName == "VENDOR" then
+        sizeX = self.db.profile.vendorSizeX or sizeX
+        sizeY = self.db.profile.vendorSizeY or sizeY
+        offsetX = self.db.profile.vendorOffsetX or offsetX
+        offsetY = self.db.profile.vendorOffsetY or offsetY
+
+    elseif stateName == "REPAIR_VENDOR" then
+        sizeX = self.db.profile.repairVendorSizeX or sizeX
+        sizeY = self.db.profile.repairVendorSizeY or sizeY
+        offsetX = self.db.profile.repairVendorOffsetX or offsetX
+        offsetY = self.db.profile.repairVendorOffsetY or offsetY
+
     else
         sizeX = self.db.profile.sizeX or sizeX
         sizeY = self.db.profile.sizeY or sizeY

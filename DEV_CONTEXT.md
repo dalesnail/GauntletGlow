@@ -1,153 +1,266 @@
 # CursorGlow Development Context
 
-## ?? Current Status
+## ?? Last Updated
 
-* Cursor glow system is functional and stable
-* Supported states:
-
-  * Default
-  * Attack
-  * Herbing
-  * Mining
-  * Loot
-  * Auto Loot
-* Tooltip-based detection is working for gathering nodes
-* Loot detection is working, including:
-
-  * Proper corpse detection
-  * Differentiation between lootable and non-lootable units
-* Tooltip module has been **removed from active use**
+2026-03-21
 
 ---
 
-## ?? Current Goals
+# ?? Current Status
 
-1. Implement flight master detection using tooltip parsing
-2. Expand detection system to support additional NPC types
-3. Maintain stability of trigger system before adding complexity
+The addon is stable and functioning correctly with the following implemented systems:
 
----
+### ? Core Features
 
-## ?? Current Focus
+* Cursor glow rendering system is working
+* State-based visual system is functioning correctly
+* Tooltip scanning supports ALL tooltip lines dynamically
+* Trigger system correctly evaluates and resolves states using priority
 
-* Implementing flight master detection via data files
-* Stabilizing trigger logic using ordered evaluation (no priority system)
-* Ensuring all states reliably trigger without conflicts
-* Expanding detection coverage (NPCs, objects, etc.)
+### ? Working States
 
----
+* DEFAULT
+* ATTACK
+* HERBALISM
+* MINING
+* LOOT
+* AUTOLOOT
+* FLIGHTMASTER
+* BATTLEMASTER (implemented, partially tested)
+* TRAINER (implemented)
+* INNKEEPER (implemented)
+* DIRECTIONS_GUARD (implemented but known to be noisy)
 
-## ?? File Responsibilities
+### ? Flight Master System
 
-* Core.lua ? Main addon logic and orchestration
-* Cursor.lua ? Cursor glow rendering and visuals
-* Trigger.lua ? Detection logic and trigger evaluation (PRIMARY FOCUS)
-* States.lua ? State definitions (no active priority system)
-* Options.lua ? In-game configuration (Ace3 framework)
-* Data/ ? Contains lookup tables for detection (Herbalism, Mining, NPCs, etc.)
-
----
-
-## ?? Known Issues / Constraints
-
-* Tooltip data is inconsistent depending on NPC/object type
-* Tooltip fade behavior is controlled by Blizzard and **cannot be reliably overridden**
-* Attempting to override tooltip anchoring or fade behavior causes:
-
-  * Flickering
-  * Tooltip desync
-  * Broken detection
-  * Stuck cursor glow states
-* Tooltip parsing is limited primarily to line 1 (name)
-* Some API functions available in Retail WoW are NOT available in TBC Classic
-
-  * Do NOT assume Retail API availability
+* Primary detection via tooltip role titles (line scanning)
+* Optional fallback via name list (currently minimal)
+* Fully working and validated
 
 ---
 
-## ?? Architecture Rules (STRICT)
+# ?? Current Development Direction
 
-* Do NOT rewrite working systems unless absolutely required
-* Preserve current file structure and module boundaries
-* Implement new features incrementally and safely
+The addon is evolving into a **tooltip-driven NPC classification system**.
+
+### Primary Detection Model
+
+* Scan ALL tooltip lines via `Tooltip:GetLines()`
+* Match against structured keyword data:
+
+  * Exact matches
+  * Substring matches
+
+### Data Source
+
+* `Data/NPCs/TooltipRoles.lua` ? primary keyword definitions
+* `Data/NPCs/FlightMasters.lua` ? optional fallback name list
+
+---
+
+# ?? Next Target Features
+
+### High Priority
+
+* Mailbox detection
+* Skinnable corpse detection
+* Vendor detection
+* Stable master detection
+
+### Experimental / Advanced
+
+* Detection based on cursor types:
+
+  * SkinAlliance
+  * SkinHorde
+
+---
+
+# ?? Known Issues / Constraints
+
+* Tooltip data varies across NPC types and zones
+* Some categories (e.g. guards) are inherently noisy
+* WoW TBC Classic API differs from Retail:
+
+  * Do NOT assume Retail-only API functions exist
+* Tooltip events fire frequently ? performance matters
+
+---
+
+# ?? Architecture Rules (STRICT)
+
+* Do NOT rewrite working systems unless absolutely necessary
+* Preserve current file structure and responsibilities
+* Extend systems incrementally and safely
 * Avoid large refactors unless explicitly requested
-* Prefer simple, stable solutions over complex systems
 
 ---
 
-## ?? State System (Current Implementation)
+# ?? File Responsibilities
 
-* Uses **ordered evaluation (NOT priority-based)**
-* First valid condition wins
-
-### Current Evaluation Order
-
-1. Herbalism
-2. Mining
-3. Flight Master (in progress)
-4. Attack
-5. Auto Loot
-6. Loot
-7. Default
-
-### Notes
-
-* Priority system was attempted but removed due to instability and debugging complexity
-* May be reintroduced later once system is fully stable
+* Core.lua ? addon initialization, state application
+* Tooltip.lua ? tooltip scanning and data extraction
+* Trigger.lua ? detection logic and candidate generation
+* States.lua ? state definitions and priority system
+* Options.lua ? configuration UI (Ace3)
+* Data/NPCs/TooltipRoles.lua ? structured tooltip keyword data
+* Data/NPCs/FlightMasters.lua ? optional fallback name data
 
 ---
 
-## ?? Debug Notes
+# ?? State System
 
-* Tooltip events can fire multiple times per frame
-* Avoid relying on tooltip lifecycle for logic timing
-* Use GameTooltipTextLeft1:GetText() for stable name retrieval
-* Always ensure DEFAULT state is returned as fallback
-* When debugging:
+### Behavior
 
-  * Print detected tooltip name
-  * Print selected state
-  * Verify trigger loop is running
+* Multiple states may be valid simultaneously
+* Highest priority state is selected
+
+### Current Priority (simplified)
+
+1. HERBALISM
+2. MINING
+3. FLIGHTMASTER
+4. AUTOLOOT
+5. LOOT
+6. ATTACK
+7. DEFAULT
+
+(New states follow similar structure and are integrated without breaking existing order)
 
 ---
 
-## ?? Hard Rules for Code Generation
+# ?? Tooltip Role Detection System
+
+### Structure
+
+```lua
+ns.Data["TOOLTIP_ROLE_KEYWORDS"] = {
+    CATEGORY = {
+        exact = { ... },
+        contains = { ... }
+    }
+}
+```
+
+### Matching Rules
+
+* `exact` ? full string match
+* `contains` ? substring match
+
+### Detection Flow
+
+1. Get all tooltip lines
+2. Iterate through lines
+3. Match against keyword tables
+4. Add matching state to candidates
+
+---
+
+# ?? Known Weak Category
+
+### DIRECTIONS_GUARD
+
+* Uses broad keyword matching (e.g. "Guard")
+* Causes false positives on generic NPCs
+* Currently accepted as "low precision / acceptable noise"
+
+---
+
+# ?? Debug / Performance Notes
+
+* Tooltip scanning must remain lightweight
+* Avoid redundant table creation where possible
+* Prefer reuse of buffers (e.g. wipe tables)
+
+---
+
+# ?? Hard Rules for Code Generation
 
 * Output FULL FILES or FULL FUNCTION BLOCKS only
 * Do NOT output partial snippets
-* Do NOT introduce new frameworks or dependencies
+* Do NOT introduce new frameworks or abstractions
 * Do NOT restructure modules
-* Follow existing naming and file organization
+* Follow existing naming and structure exactly
+* Preserve working behavior at all costs
 
 ---
 
-## ?? Development Guidelines
+# ?? Development Workflow (CRITICAL)
 
-* Prefer extending existing systems over replacing them
-* Keep logic modular and contained within assigned files
-* Validate each step in-game before continuing
-* Maintain compatibility with WoW TBC Classic API only
-* Avoid overengineering early systems (stability first)
+## ChatGPT (Planning + Debugging)
+
+Use ChatGPT for:
+
+* System design
+* Debugging issues
+* Data structure creation
+* Writing static data files
+* Breaking work into safe steps
+
+## Codex (Execution)
+
+Use Codex for:
+
+* Implementing features
+* Modifying files
+* Wiring systems together
+
+### Codex Rules
+
+* Tasks must be SMALL and SCOPED
+* Prefer single-feature or limited multi-file changes
+* Always include guard rails:
+
+  * “Do not refactor working systems”
+  * “Preserve structure”
+  * “Additive changes only”
 
 ---
 
-## ?? Tooltip System Decision (IMPORTANT)
+# ?? Codex Usage Strategy
 
-* Tooltip module has been removed due to engine limitations
-* Fade behavior cannot be reliably overridden without side effects
-* Hybrid anchoring (cursor + fixed) proved unstable
-* Recommendation:
+### Safe Tasks
 
-  ? Users should use mouse-anchored tooltips for best experience
+* Adding new detection categories
+* Updating Trigger.lua logic
+* Extending Options.lua
 
-* Future tooltip work should be approached cautiously and modularly
+### Medium Tasks
+
+* Multi-file feature integration (with guard rails)
+
+### Dangerous Tasks (AVOID)
+
+* Full addon refactors
+* Large data generation in one pass
+* Architecture changes
 
 ---
 
-## ?? Future Considerations (Not Active Work)
+# ?? Data Strategy
 
-* Reintroduce priority system (data-driven) once system is stable
-* Expand NPC detection (vendors, trainers, quest givers, etc.)
-* Improve gathering node coverage
-* Multi-tooltip debugging tools (DaleBug integration)
-* Performance optimization passes
+* Tooltip-based categories use shared structured file:
+
+  * TooltipRoles.lua
+* Fallback name-based detection uses separate files
+* Keep fallback datasets minimal unless necessary
+
+---
+
+# ?? Future Expansion
+
+Potential future systems:
+
+* Improved vendor detection (if clean identifiers found)
+* Cursor-type-based detection (SkinAlliance / SkinHorde)
+* Performance optimization pass
+* Debug overlay tools (DaleBug integration)
+
+---
+
+# ?? Guiding Principle
+
+> Prefer **simple, reliable detection systems** over complex or fragile ones.
+
+If a category cannot be detected cleanly via tooltip or simple logic,
+it should be deferred rather than forced.

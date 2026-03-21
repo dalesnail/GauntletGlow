@@ -76,6 +76,26 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
     if HasTooltipRole(lines, "INNKEEPER") then
         table.insert(candidates, "INNKEEPER")
     end
+
+    if HasTooltipRole(lines, "STABLEMASTER") then
+        table.insert(candidates, "STABLEMASTER")
+    end
+
+    if HasTooltipRole(lines, "MAILBOX") then
+        table.insert(candidates, "MAILBOX")
+    end
+
+    if HasTooltipRole(lines, "SKINNABLE") then
+        table.insert(candidates, "SKINNABLE")
+    end
+
+    if HasTooltipRole(lines, "VENDOR") then
+        table.insert(candidates, "VENDOR")
+    end
+
+    if HasTooltipRole(lines, "REPAIR_VENDOR") then
+        table.insert(candidates, "REPAIR_VENDOR")
+    end
 end
 
 -- ############################################################

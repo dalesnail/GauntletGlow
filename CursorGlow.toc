@@ -4,6 +4,7 @@
 ## Author: Dalesnail
 ## Version: 0.1.0 c
 ## SavedVariables: CursorGlowDB
+## IconTexture: Interface\AddOns\CursorGlow\Media\Icons\icon_glow
 
 # ------------------------------
 # Ace3 (EMBEDDED - FULL STRUCTURE)
