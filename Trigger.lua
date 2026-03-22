@@ -23,9 +23,9 @@ local GetProfessionInfo = GetProfessionInfo
 local Tooltip = ns.Tooltip
 local Data = ns.Data
 
-local function HasTooltipRole(lines, category)
-    local roleData = Data and Data["TOOLTIP_ROLE_KEYWORDS"]
-    local categoryData = roleData and roleData[category]
+local function HasTooltipKeywords(dataKey, lines, category)
+    local keywordData = Data and Data[dataKey]
+    local categoryData = keywordData and keywordData[category]
     if not categoryData or not lines then
         return false
     end
@@ -45,6 +45,14 @@ local function HasTooltipRole(lines, category)
     end
 
     return false
+end
+
+local function HasTooltipRole(lines, category)
+    return HasTooltipKeywords("TOOLTIP_ROLE_KEYWORDS", lines, category)
+end
+
+local function HasWorldTooltipKeyword(lines, category)
+    return HasTooltipKeywords("TOOLTIP_WORLD_KEYWORDS", lines, category)
 end
 
 local function IsFlightMasterName(name)
@@ -264,6 +272,16 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
     end
 end
 
+local function AddWorldTooltipCandidates(candidates, lines)
+    if HasWorldTooltipKeyword(lines, "HERBALISM") then
+        table.insert(candidates, "HERBALISM")
+    end
+
+    if HasWorldTooltipKeyword(lines, "MINING") then
+        table.insert(candidates, "MINING")
+    end
+end
+
 -- ############################################################
 -- TRIGGER LOOP
 -- ############################################################
@@ -329,16 +347,7 @@ function CursorGlow:EvaluateTrigger()
         name = strtrim(name)
     end
 
-    if name and Data then
-        if Data["HERBALISM"] and Data["HERBALISM"][name] then
-            table.insert(candidates, "HERBALISM")
-        end
-
-        if Data["MINING"] and Data["MINING"][name] then
-            table.insert(candidates, "MINING")
-        end
-    end
-
+    AddWorldTooltipCandidates(candidates, lines)
     AddTooltipRoleCandidates(candidates, lines, name)
 
     if GetHoveredBagItem() then
