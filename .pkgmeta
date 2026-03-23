@@ -1,0 +1,11 @@
+package-as: CursorGlow
+
+ignore:
+  - .github
+  - .gitignore
+  - .git
+  - DEV_CONTEXT.md
+  - *.psd
+  - *.zip
+  - *.bak
+  - *.tmp
