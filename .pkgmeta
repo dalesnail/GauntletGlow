@@ -1,4 +1,4 @@
-package-as: CursorGlow
+package-as: GauntletGlow
 
 ignore:
   - .github
