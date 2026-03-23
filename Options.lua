@@ -740,10 +740,11 @@ local function CreateValueSlider(parent, labelText, minValue, maxValue, step)
 
     row.valueFrame = CreateFrame("Button", nil, row)
     row.valueFrame:SetPoint("TOPRIGHT", 2, 2)
-    row.valueFrame:SetSize(56, 20)
+    row.valueFrame:SetSize(64, 20)
     
     row.valueText = CreateText(row.valueFrame, "GameFontHighlight", "", FONT_STYLES.value)
-    row.valueText:SetAllPoints()
+    row.valueText:ClearAllPoints()
+    row.valueText:SetPoint("RIGHT", row.valueFrame, "RIGHT", -6, 0)
     row.valueText:SetJustifyH("RIGHT")
     row.valueText:SetJustifyV("MIDDLE")
     
@@ -762,6 +763,7 @@ local function CreateValueSlider(parent, labelText, minValue, maxValue, step)
     row.valueEdit:SetTextColor(GOLD_TEXT[1], GOLD_TEXT[2], GOLD_TEXT[3])
     row.valueEdit:SetShadowOffset(1, -1)
     row.valueEdit:SetShadowColor(0, 0, 0, 0.75)
+    row.valueEdit:SetTextInsets(0, 6, 0, 0)
     
     if row.valueEdit.Left then row.valueEdit.Left:Hide() end
     if row.valueEdit.Middle then row.valueEdit.Middle:Hide() end
