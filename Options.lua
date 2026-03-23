@@ -731,6 +731,14 @@ local function FormatNumericValue(value)
         return tostring(math.floor(value + 0.5))
     end
 
+    if math.abs((value * 10) - math.floor((value * 10) + 0.5)) < 0.001 then
+        return string.format("%.1f", value)
+    end
+
+    if math.abs((value * 100) - math.floor((value * 100) + 0.5)) < 0.001 then
+        return string.format("%.2f", value)
+    end
+
     return string.format("%.1f", value)
 end
 
@@ -1098,6 +1106,12 @@ local function GetAppearanceProfile(self)
     return self and self.db and self.db.profile or nil
 end
 
+local function RefreshAppearance(self)
+    if self.RefreshGlowAppearance then
+        self:RefreshGlowAppearance()
+    end
+end
+
 local function GetAppearanceCustomColorEnabled(self)
     local profile = GetAppearanceProfile(self)
     return profile and profile.useCustomColor or false
@@ -1111,9 +1125,7 @@ local function SetAppearanceCustomColorEnabled(self, enabled)
 
     profile.useCustomColor = enabled and true or false
 
-    if self.RefreshGlowAppearance then
-        self:RefreshGlowAppearance()
-    end
+    RefreshAppearance(self)
 end
 
 local function GetAppearanceColor(self)
@@ -1135,9 +1147,7 @@ local function SetAppearanceColor(self, r, g, b)
     profile.colorG = g or 1
     profile.colorB = b or 1
 
-    if self.RefreshGlowAppearance then
-        self:RefreshGlowAppearance()
-    end
+    RefreshAppearance(self)
 end
 
 local function GetAppearanceDesaturateEnabled(self)
@@ -1153,9 +1163,71 @@ local function SetAppearanceDesaturateEnabled(self, enabled)
 
     profile.desaturateTexture = enabled and true or false
 
-    if self.RefreshGlowAppearance then
-        self:RefreshGlowAppearance()
+    RefreshAppearance(self)
+end
+
+local function GetAppearanceBrightnessEnabled(self)
+    local profile = GetAppearanceProfile(self)
+    return profile and profile.useBrightness or false
+end
+
+local function SetAppearanceBrightnessEnabled(self, enabled)
+    local profile = GetAppearanceProfile(self)
+    if not profile then
+        return
     end
+
+    profile.useBrightness = enabled and true or false
+
+    RefreshAppearance(self)
+end
+
+local function GetAppearanceBrightness(self)
+    local profile = GetAppearanceProfile(self)
+    return profile and profile.brightness or 1
+end
+
+local function SetAppearanceBrightness(self, value)
+    local profile = GetAppearanceProfile(self)
+    if not profile then
+        return
+    end
+
+    profile.brightness = value or 1
+
+    RefreshAppearance(self)
+end
+
+local function GetAppearanceGlobalAlphaEnabled(self)
+    local profile = GetAppearanceProfile(self)
+    return profile and profile.useGlobalAlpha or false
+end
+
+local function SetAppearanceGlobalAlphaEnabled(self, enabled)
+    local profile = GetAppearanceProfile(self)
+    if not profile then
+        return
+    end
+
+    profile.useGlobalAlpha = enabled and true or false
+
+    RefreshAppearance(self)
+end
+
+local function GetAppearanceGlobalAlpha(self)
+    local profile = GetAppearanceProfile(self)
+    return profile and profile.globalAlpha or 1
+end
+
+local function SetAppearanceGlobalAlpha(self, value)
+    local profile = GetAppearanceProfile(self)
+    if not profile then
+        return
+    end
+
+    profile.globalAlpha = value or 1
+
+    RefreshAppearance(self)
 end
 
 local function CreateInlineCheckbox(parent, title)
@@ -1186,6 +1258,57 @@ local function SetInlineCheckboxEnabled(row, enabled)
 
     StyleText(row.label, enabled and FONT_STYLES.sectionTitle or FONT_STYLES.muted)
     row:SetAlpha(enabled and 1 or 0.6)
+end
+
+local function SetInlineCheckboxStableEnabled(row, enabled)
+    if not row then
+        return
+    end
+
+    if enabled then
+        row.check:Enable()
+    else
+        row.check:Disable()
+    end
+
+    ApplyFont(
+        row.label,
+        FONT_STYLES.sectionTitle.template,
+        FONT_STYLES.sectionTitle.size,
+        FONT_STYLES.sectionTitle.flags,
+        enabled and FONT_STYLES.sectionTitle.color or MUTED_TEXT,
+        FONT_STYLES.sectionTitle.shadow
+    )
+    row:SetAlpha(enabled and 1 or 0.6)
+end
+
+local function SetValueSliderEnabled(row, enabled)
+    if not row then
+        return
+    end
+
+    if enabled then
+        row.slider:Enable()
+        row.slider:EnableMouse(true)
+        row.valueFrame:EnableMouse(true)
+        ApplyFont(row.label, FONT_STYLES.sectionTitle.template, FONT_STYLES.sectionTitle.size, FONT_STYLES.sectionTitle.flags, FONT_STYLES.sectionTitle.color, FONT_STYLES.sectionTitle.shadow)
+        ApplyFont(row.valueText, FONT_STYLES.value.template, FONT_STYLES.value.size, FONT_STYLES.value.flags, FONT_STYLES.value.color, FONT_STYLES.value.shadow)
+        row.valueFrame:SetAlpha(1)
+        row.slider:SetAlpha(1)
+        row:SetAlpha(1)
+    else
+        row.slider:Disable()
+        row.slider:EnableMouse(false)
+        row.valueFrame:EnableMouse(false)
+        row.valueEdit:ClearFocus()
+        row.valueEdit:Hide()
+        row.valueText:Show()
+        ApplyFont(row.label, FONT_STYLES.sectionTitle.template, FONT_STYLES.sectionTitle.size, FONT_STYLES.sectionTitle.flags, MUTED_TEXT, FONT_STYLES.sectionTitle.shadow)
+        ApplyFont(row.valueText, FONT_STYLES.value.template, FONT_STYLES.value.size, FONT_STYLES.value.flags, MUTED_TEXT, FONT_STYLES.value.shadow)
+        row.valueFrame:SetAlpha(0.75)
+        row.slider:SetAlpha(0.45)
+        row:SetAlpha(0.75)
+    end
 end
 
 local function CreateColorSwatchButton(parent)
@@ -1335,20 +1458,63 @@ end
 -- APPEARANCE PAGE BUILD
 ------------------------------------------------------------------------------------
 local function BuildAppearancePage(self, page)
-    page.intro = CreateText(page.body, "GameFontHighlight", "Global appearance controls apply to every cursor state without changing its texture, size, or offset rules.", FONT_STYLES.body)
+    local function RoundAppearanceValue(value, step)
+        local roundedValue = math.floor((value / step) + 0.5) * step
+        return tonumber(string.format("%.2f", roundedValue))
+    end
+
+    local sectionGap = 12
+    local introGap = 18
+    local sectionBottomPadding = 12
+    local toggleRegionWidth = 170
+
+    local function UpdateAppearanceScrollLayout()
+        if not page.scrollFrame or not page.scrollContent or not page.intro then
+            return
+        end
+
+        local contentWidth = math.max(page.scrollFrame:GetWidth(), 1)
+        local viewportHeight = math.max(page.scrollFrame:GetHeight(), 1)
+        page.scrollContent:SetWidth(contentWidth)
+
+        local introHeight = math.max(page.intro:GetStringHeight() or 0, page.intro:GetHeight() or 0, 0)
+        local totalHeight = introHeight
+            + introGap
+            + page.recolorSection:GetHeight()
+            + sectionGap
+            + page.brightnessSection:GetHeight()
+            + sectionGap
+            + page.alphaSection:GetHeight()
+            + sectionBottomPadding
+
+        page.scrollContent:SetHeight(math.max(viewportHeight, totalHeight))
+    end
+
+    page.scrollFrame = CreateFrame("ScrollFrame", nil, page.body, "UIPanelScrollFrameTemplate")
+    page.scrollFrame:SetPoint("TOPLEFT", page.body, "TOPLEFT", 0, 0)
+    page.scrollFrame:SetPoint("BOTTOMRIGHT", page.body, "BOTTOMRIGHT", -28, 0)
+
+    page.scrollContent = CreateFrame("Frame", nil, page.scrollFrame)
+    page.scrollContent:SetPoint("TOPLEFT", 0, 0)
+    page.scrollContent:SetSize(1, 1)
+    page.scrollFrame:SetScrollChild(page.scrollContent)
+    page.scrollFrame:SetScript("OnSizeChanged", UpdateAppearanceScrollLayout)
+    page:SetScript("OnShow", UpdateAppearanceScrollLayout)
+
+    page.intro = CreateText(page.scrollContent, "GameFontHighlight", "Global appearance controls apply to every cursor state without changing its texture, size, or offset rules.", FONT_STYLES.body)
     page.intro:SetPoint("TOPLEFT", 0, 0)
     page.intro:SetPoint("TOPRIGHT", 0, 0)
 
-    page.recolorSection = CreateSectionPanel(page.body, "Color", "")
-    page.recolorSection:SetPoint("TOPLEFT", page.intro, "BOTTOMLEFT", 0, -18)
-    page.recolorSection:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -190)
-    page.recolorSection:SetHeight(168)
+    page.recolorSection = CreateSectionPanel(page.scrollContent, "Color", "")
+    page.recolorSection:SetPoint("TOPLEFT", page.intro, "BOTTOMLEFT", 0, -introGap)
+    page.recolorSection:SetPoint("TOPRIGHT", page.intro, "BOTTOMRIGHT", 0, -18)
+    page.recolorSection:SetHeight(126)
     page.recolorSection.bodyText:SetText("")
     page.recolorSection.bodyText:Hide()
 
     page.recolorControls = CreateFrame("Frame", nil, page.recolorSection)
-    page.recolorControls:SetPoint("TOPLEFT", page.recolorSection.separator, "BOTTOMLEFT", 0, -14)
-    page.recolorControls:SetPoint("TOPRIGHT", page.recolorSection.separator, "BOTTOMRIGHT", 0, -14)
+    page.recolorControls:SetPoint("TOPLEFT", page.recolorSection.separator, "BOTTOMLEFT", 0, -12)
+    page.recolorControls:SetPoint("TOPRIGHT", page.recolorSection.separator, "BOTTOMRIGHT", 0, -12)
     page.recolorControls:SetHeight(28)
 
     page.customColorToggle = CreateInlineCheckbox(page.recolorControls, "Custom Color")
@@ -1378,23 +1544,81 @@ local function BuildAppearancePage(self, page)
     page.resetColorButton = CreateFrame("Button", nil, page.recolorSection, "UIPanelButtonTemplate")
     page.resetColorButton:SetSize(100, 22)
     page.resetColorButton:SetText("Reset Color")
-    page.resetColorButton:SetPoint("TOPLEFT", page.recolorControls, "BOTTOMLEFT", 2, -14)
+    page.resetColorButton:SetPoint("TOPLEFT", page.recolorControls, "BOTTOMLEFT", 2, -10)
     page.resetColorButton:SetScript("OnClick", function()
         SetAppearanceColor(self, 1, 1, 1)
         page:RefreshControls()
     end)
 
-    page.alphaSection = CreateSectionPanel(page.body, "Glow Alpha", "Brightness and alpha controls are planned for a later pass. This pass only adds shared color and desaturation settings.")
-    page.alphaSection:SetPoint("TOPLEFT", page.recolorSection, "BOTTOMLEFT", 0, -14)
-    page.alphaSection:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -190)
+    page.brightnessSection = CreateSectionPanel(page.scrollContent, "Brightness", "")
+    page.brightnessSection:SetPoint("TOPLEFT", page.recolorSection, "BOTTOMLEFT", 0, -sectionGap)
+    page.brightnessSection:SetPoint("TOPRIGHT", page.recolorSection, "BOTTOMRIGHT", 0, -12)
+    page.brightnessSection:SetHeight(160)
+    page.brightnessSection.bodyText:SetText("")
+    page.brightnessSection.bodyText:Hide()
 
-    page.previewSection = CreateSectionPanel(page.body, "Preview Behavior", "Appearance changes update the active glow immediately and still use the existing state priority, texture swapping, size and offset settings, and test mode behavior.")
-    page.previewSection:SetPoint("TOPLEFT", page.alphaSection, "BOTTOMLEFT", 0, -14)
-    page.previewSection:SetPoint("TOPRIGHT", page.alphaSection, "BOTTOMRIGHT", 0, -14)
+    page.brightnessToggleRegion = CreateFrame("Frame", nil, page.brightnessSection)
+    page.brightnessToggleRegion:SetPoint("TOPLEFT", page.brightnessSection.separator, "BOTTOMLEFT", 0, -12)
+    page.brightnessToggleRegion:SetSize(toggleRegionWidth, 26)
+
+    page.brightnessToggle = CreateInlineCheckbox(page.brightnessToggleRegion, "Enable")
+    page.brightnessToggle:SetAllPoints()
+    page.brightnessToggle.check:SetScript("OnClick", function(button)
+        SetAppearanceBrightnessEnabled(self, button:GetChecked())
+        page:RefreshControls()
+    end)
+
+    page.brightnessSlider = CreateValueSlider(page.brightnessSection, "Brightness", 0.25, 2.0, 0.05)
+    page.brightnessSlider:SetPoint("TOPLEFT", page.brightnessSection.separator, "BOTTOMLEFT", 0, -46)
+    page.brightnessSlider:SetPoint("TOPRIGHT", page.brightnessSection.separator, "BOTTOMRIGHT", 0, -46)
+    page.brightnessSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.brightnessSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = RoundAppearanceValue(value, 0.05)
+        page.brightnessSlider:SetDisplayValue(roundedValue)
+        SetAppearanceBrightness(self, roundedValue)
+    end)
+
+    page.alphaSection = CreateSectionPanel(page.scrollContent, "Alpha", "")
+    page.alphaSection:SetPoint("TOPLEFT", page.brightnessSection, "BOTTOMLEFT", 0, -sectionGap)
+    page.alphaSection:SetPoint("TOPRIGHT", page.brightnessSection, "BOTTOMRIGHT", 0, -12)
+    page.alphaSection:SetHeight(160)
+    page.alphaSection.bodyText:SetText("")
+    page.alphaSection.bodyText:Hide()
+
+    page.alphaToggleRegion = CreateFrame("Frame", nil, page.alphaSection)
+    page.alphaToggleRegion:SetPoint("TOPLEFT", page.alphaSection.separator, "BOTTOMLEFT", 0, -12)
+    page.alphaToggleRegion:SetSize(toggleRegionWidth, 26)
+
+    page.alphaToggle = CreateInlineCheckbox(page.alphaToggleRegion, "Enable")
+    page.alphaToggle:SetAllPoints()
+    page.alphaToggle.check:SetScript("OnClick", function(button)
+        SetAppearanceGlobalAlphaEnabled(self, button:GetChecked())
+        page:RefreshControls()
+    end)
+
+    page.alphaSlider = CreateValueSlider(page.alphaSection, "Alpha", 0.05, 1.0, 0.05)
+    page.alphaSlider:SetPoint("TOPLEFT", page.alphaSection.separator, "BOTTOMLEFT", 0, -46)
+    page.alphaSlider:SetPoint("TOPRIGHT", page.alphaSection.separator, "BOTTOMRIGHT", 0, -46)
+    page.alphaSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.alphaSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = RoundAppearanceValue(value, 0.05)
+        page.alphaSlider:SetDisplayValue(roundedValue)
+        SetAppearanceGlobalAlpha(self, roundedValue)
+    end)
 
     page.RefreshControls = function(currentPage)
         local useCustomColor = GetAppearanceCustomColorEnabled(self)
         local colorR, colorG, colorB = GetAppearanceColor(self)
+        local useBrightness = GetAppearanceBrightnessEnabled(self)
+        local brightness = RoundAppearanceValue(GetAppearanceBrightness(self), 0.05)
+        local useGlobalAlpha = GetAppearanceGlobalAlphaEnabled(self)
+        local globalAlpha = RoundAppearanceValue(GetAppearanceGlobalAlpha(self), 0.05)
 
         currentPage.customColorToggle.check:SetChecked(useCustomColor)
         currentPage.colorSwatch:SetSwatchColor(colorR, colorG, colorB)
@@ -1402,6 +1626,23 @@ local function BuildAppearancePage(self, page)
 
         currentPage.desaturateToggle.check:SetChecked(GetAppearanceDesaturateEnabled(self))
         SetInlineCheckboxEnabled(currentPage.desaturateToggle, useCustomColor)
+
+        currentPage.brightnessToggle.check:SetChecked(useBrightness)
+        currentPage.brightnessSlider.isUpdating = true
+        currentPage.brightnessSlider.slider:SetValue(brightness)
+        currentPage.brightnessSlider:SetDisplayValue(brightness)
+        currentPage.brightnessSlider.isUpdating = false
+        SetInlineCheckboxStableEnabled(currentPage.brightnessToggle, true)
+        SetValueSliderEnabled(currentPage.brightnessSlider, useBrightness)
+
+        currentPage.alphaToggle.check:SetChecked(useGlobalAlpha)
+        currentPage.alphaSlider.isUpdating = true
+        currentPage.alphaSlider.slider:SetValue(globalAlpha)
+        currentPage.alphaSlider:SetDisplayValue(globalAlpha)
+        currentPage.alphaSlider.isUpdating = false
+        SetInlineCheckboxStableEnabled(currentPage.alphaToggle, true)
+        SetValueSliderEnabled(currentPage.alphaSlider, useGlobalAlpha)
+        UpdateAppearanceScrollLayout()
     end
 end
 

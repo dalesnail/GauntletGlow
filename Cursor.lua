@@ -3,6 +3,8 @@ local GG = ns.GauntletGlow
 
 local GetCursorPosition = GetCursorPosition
 local UIParent = UIParent
+local min = math.min
+local max = math.max
 
 local function SetTextureDesaturation(texture, enabled)
     if not texture then
@@ -24,13 +26,26 @@ function GG:RefreshGlowAppearance()
         return
     end
 
+    local colorR, colorG, colorB = 1, 1, 1
+    local desaturate = false
     if profile.useCustomColor then
-        tex:SetVertexColor(profile.colorR or 1, profile.colorG or 1, profile.colorB or 1)
-        SetTextureDesaturation(tex, profile.desaturateTexture)
-    else
-        tex:SetVertexColor(1, 1, 1)
-        SetTextureDesaturation(tex, false)
+        colorR = profile.colorR or 1
+        colorG = profile.colorG or 1
+        colorB = profile.colorB or 1
+        desaturate = profile.desaturateTexture and true or false
     end
+
+    local brightness = profile.useBrightness and (profile.brightness or 1) or 1
+    local alpha = profile.useGlobalAlpha and (profile.globalAlpha or 1) or 1
+
+    colorR = min(1, max(0, colorR * brightness))
+    colorG = min(1, max(0, colorG * brightness))
+    colorB = min(1, max(0, colorB * brightness))
+    alpha = min(1, max(0, alpha))
+
+    tex:SetVertexColor(colorR, colorG, colorB)
+    tex:SetAlpha(alpha)
+    SetTextureDesaturation(tex, desaturate)
 end
 
 function GG:CreateGauntletGlow()

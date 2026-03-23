@@ -30,6 +30,10 @@ function GG:OnInitialize()
             colorG = 1,
             colorB = 1,
             desaturateTexture = false,
+            useBrightness = false,
+            brightness = 1,
+            useGlobalAlpha = false,
+            globalAlpha = 1,
 
             -- DEFAULT
             offsetX = 15,
