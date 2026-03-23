@@ -7,9 +7,9 @@ local CursorGlow = ns.CursorGlow
 local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
 local PANEL_MIN_WIDTH = 820
 local PANEL_MIN_HEIGHT = 560
-local NAV_WIDTH = 170
+local NAV_WIDTH = 130
 local NAV_TOP_PADDING = 18
-local CURSORS_LIST_WIDTH = 220
+local CURSORS_LIST_WIDTH = 165
 local PAGE_INSET_X = 8
 local PAGE_HEADER_TOP = -22
 local PAGE_HEADER_HEIGHT = 58
@@ -33,11 +33,11 @@ local PANEL_BORDER = { 0.70, 0.62, 0.45, 0.16 }
 local PANEL_BACKGROUND_DARK = { 0.00, 0.00, 0.00, 0.20 }
 local PANEL_HEADER_SHADE = { 0.18, 0.17, 0.14, 0.12 }
 local PANEL_FOOTER_SHADE = { 0.00, 0.00, 0.00, 0.20 }
-local SELECTED_FILL = { 0.24, 0.20, 0.11, 0.92 }
-local SELECTED_BORDER = { 0.90, 0.77, 0.30, 0.18 }
+local SELECTED_FILL = { 0.22, 0.17, 0.08, 0.58 }
+local SELECTED_BORDER = { 0.90, 0.77, 0.30, 0.00 }
 local SUBTLE_HOVER_FILL = { 0.18, 0.14, 0.08, 0.10 }
 local SUBTLE_IDLE_FILL = { 0.00, 0.00, 0.00, 0.00 }
-local NAV_HOVER_FILL = { 0.18, 0.14, 0.08, 0.12 }
+local NAV_HOVER_FILL = { 0.22, 0.17, 0.08, 0.34 }
 local CURSOR_HOVER_FILL = { 0.16, 0.13, 0.08, 0.10 }
 
 local FONT_STYLES = {
@@ -48,10 +48,10 @@ local FONT_STYLES = {
     bodySmall = { template = "GameFontHighlightSmall", size = 12, color = BODY_TEXT, shadow = 0.35 },
     muted = { template = "GameFontHighlightSmall", size = 12, color = MUTED_TEXT, shadow = 0.25 },
     value = { template = "GameFontHighlight", size = 14, color = GOLD_TEXT, shadow = 0.75 },
-    nav = { template = "GameFontNormalLarge", size = 19, color = GOLD_TEXT_DIM, shadow = 0.8 },
+    nav = { template = "GameFontNormalLarge", size = 19, color = { 0.54, 0.54, 0.54 }, shadow = 0.55 },
     navSelected = { template = "GameFontNormalLarge", size = 19, color = GOLD_TEXT, shadow = 0.85 },
-    list = { template = "GameFontHighlightSmall", size = 12, color = BODY_TEXT, shadow = 0.35 },
-    listHover = { template = "GameFontHighlightSmall", size = 12, color = SECTION_TEXT, shadow = 0.45 },
+    list = { template = "GameFontHighlightSmall", size = 12, color = { 0.54, 0.54, 0.54 }, shadow = 0.55 },
+    listHover = { template = "GameFontHighlightSmall", size = 12, color = GOLD_TEXT, shadow = 0.80 },
     listSelected = { template = "GameFontNormal", size = 12, color = GOLD_TEXT, shadow = 0.55 },
 }
 
@@ -209,6 +209,29 @@ local CURSOR_SLIDER_DEFS = {
 }
 
 local sliderNameIndex = 0
+
+------------------------------------------------------------------------------------
+-- VERSION HELPER FUNCTION
+------------------------------------------------------------------------------------
+local function GetAddonMetadataValue(addonName, field)
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        return C_AddOns.GetAddOnMetadata(addonName, field)
+    end
+
+    if GetAddOnMetadata then
+        return GetAddOnMetadata(addonName, field)
+    end
+
+    return nil
+end
+
+local function GetAddonDisplayTitle(addonName)
+    return GetAddonMetadataValue(addonName, "Title") or addonName or "CursorGlow"
+end
+
+local function GetAddonVersion(addonName)
+    return GetAddonMetadataValue(addonName, "Version") or "Unknown"
+end
 
 ------------------------------------------------------------------------------------
 -- SHARED TEXT STYLING
@@ -468,15 +491,11 @@ local function ApplySelectableButtonVisuals(button, selected, palette, normalTex
     end
 
     if button.accent then
-        button.accent:SetAlpha(button.selected and 1 or 0)
+        button.accent:SetAlpha((button.selected and palette.showSelectedAccent) and 1 or 0)
     end
 
     if button.SetBackdropBorderColor then
-        if button.selected then
-            button:SetBackdropBorderColor(SELECTED_BORDER[1], SELECTED_BORDER[2], SELECTED_BORDER[3], SELECTED_BORDER[4])
-        else
-            button:SetBackdropBorderColor(0, 0, 0, 0)
-        end
+        button:SetBackdropBorderColor(0, 0, 0, 0)
     end
 
     StyleText(button.text, button.selected and selectedTextStyle or normalTextStyle)
@@ -488,7 +507,7 @@ local function ApplySelectableButtonVisuals(button, selected, palette, normalTex
             selfButton.fill:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4] or 1)
         end
 
-        if selfButton.hoverFill and not selfButton.selected then
+        if selfButton.hoverFill and not selfButton.selected and currentPalette.useHoverOverlay then
             selfButton.hoverFill:SetAlpha(1)
         end
 
@@ -496,7 +515,14 @@ local function ApplySelectableButtonVisuals(button, selected, palette, normalTex
     end)
 
     button:SetScript("OnLeave", function(selfButton)
-        ApplySelectableButtonVisuals(selfButton, selfButton.selected, selfButton.visualPalette or palette, normalTextStyle, hoverTextStyle, selectedTextStyle)
+        ApplySelectableButtonVisuals(
+            selfButton,
+            selfButton.selected,
+            selfButton.visualPalette or palette,
+            normalTextStyle,
+            hoverTextStyle,
+            selectedTextStyle
+        )
     end)
 end
 
@@ -521,9 +547,10 @@ local function CreateNavButton(parent, title)
             selfButton,
             selected,
             {
-                normalFill = SUBTLE_IDLE_FILL,
-                hoverFill = NAV_HOVER_FILL,
-                selectedFill = SELECTED_FILL,
+                normalFill = { 0, 0, 0, 0 },
+                hoverFill = { 0, 0, 0, 0 },
+                selectedFill = { 0, 0, 0, 0 },
+                showSelectedAccent = false,
             },
             FONT_STYLES.nav,
             FONT_STYLES.navSelected,
@@ -556,9 +583,10 @@ local function CreateCursorStateButton(parent, title)
             selfButton,
             selected,
             {
-                normalFill = SUBTLE_IDLE_FILL,
-                hoverFill = CURSOR_HOVER_FILL,
-                selectedFill = SELECTED_FILL,
+                normalFill = { 0, 0, 0, 0 },
+                hoverFill = { 0, 0, 0, 0 },
+                selectedFill = { 0, 0, 0, 0 },
+                showSelectedAccent = false,
             },
             FONT_STYLES.list,
             FONT_STYLES.listHover,
@@ -710,8 +738,96 @@ local function CreateValueSlider(parent, labelText, minValue, maxValue, step)
     row.label = CreateText(row, "GameFontNormal", labelText, FONT_STYLES.sectionTitle)
     row.label:SetPoint("TOPLEFT", 0, 0)
 
-    row.valueText = CreateText(row, "GameFontHighlight", "", FONT_STYLES.value)
-    row.valueText:SetPoint("TOPRIGHT", 0, 0)
+    row.valueFrame = CreateFrame("Button", nil, row)
+    row.valueFrame:SetPoint("TOPRIGHT", 2, 2)
+    row.valueFrame:SetSize(56, 20)
+    
+    row.valueText = CreateText(row.valueFrame, "GameFontHighlight", "", FONT_STYLES.value)
+    row.valueText:SetAllPoints()
+    row.valueText:SetJustifyH("RIGHT")
+    row.valueText:SetJustifyV("MIDDLE")
+    
+    row.valueEdit = CreateFrame("EditBox", nil, row.valueFrame, "InputBoxTemplate")
+    row.valueEdit:SetPoint("TOPLEFT", -2, 2)
+    row.valueEdit:SetPoint("BOTTOMRIGHT", 2, -2)
+    row.valueEdit:SetAutoFocus(false)
+    row.valueEdit:SetNumeric(false)
+    row.valueEdit:SetJustifyH("RIGHT")
+    row.valueEdit:SetJustifyV("MIDDLE")
+    row.valueEdit:SetTextInsets(0, 0, 0, 0)
+    row.valueEdit:SetMaxLetters(8)
+    row.valueEdit:Hide()
+    
+    row.valueEdit:SetFontObject(GameFontHighlight)
+    row.valueEdit:SetTextColor(GOLD_TEXT[1], GOLD_TEXT[2], GOLD_TEXT[3])
+    row.valueEdit:SetShadowOffset(1, -1)
+    row.valueEdit:SetShadowColor(0, 0, 0, 0.75)
+    
+    if row.valueEdit.Left then row.valueEdit.Left:Hide() end
+    if row.valueEdit.Middle then row.valueEdit.Middle:Hide() end
+    if row.valueEdit.Right then row.valueEdit.Right:Hide() end
+    if row.valueEdit.LeftMiddle then row.valueEdit.LeftMiddle:Hide() end
+    if row.valueEdit.RightMiddle then row.valueEdit.RightMiddle:Hide() end
+    if row.valueEdit.MiddleMiddle then row.valueEdit.MiddleMiddle:Hide() end
+    if row.valueEdit.TopLeft then row.valueEdit.TopLeft:Hide() end
+    if row.valueEdit.TopRight then row.valueEdit.TopRight:Hide() end
+    if row.valueEdit.TopMiddle then row.valueEdit.TopMiddle:Hide() end
+    if row.valueEdit.BottomLeft then row.valueEdit.BottomLeft:Hide() end
+    if row.valueEdit.BottomRight then row.valueEdit.BottomRight:Hide() end
+    if row.valueEdit.BottomMiddle then row.valueEdit.BottomMiddle:Hide() end
+
+    -- Toggle edit mode
+    local function ShowEdit(self)
+        self.valueText:Hide()
+        self.valueEdit:Show()
+        self.valueEdit:SetText(self.valueText:GetText())
+        self.valueEdit:HighlightText()
+        self.valueEdit:SetFocus()
+    end
+
+    local function HideEdit(self, apply)
+        if apply then
+            local text = self.valueEdit:GetText()
+            local num = tonumber(text)
+
+            if num then
+                local minVal, maxVal = self.slider:GetMinMaxValues()
+                num = math.max(minVal, math.min(maxVal, num))
+
+                self.slider:SetValue(num)
+            end
+        end
+
+        self.valueEdit:Hide()
+        self.valueText:Show()
+    end
+
+    row.valueFrame:EnableMouse(true)
+    row.valueFrame:SetScript("OnMouseDown", function()
+        ShowEdit(row)
+    end)
+
+    row.valueEdit:SetScript("OnEnterPressed", function()
+        HideEdit(row, true)
+    end)
+
+    row.valueEdit:SetScript("OnEscapePressed", function()
+        HideEdit(row, false)
+    end)
+
+    row.valueEdit:SetScript("OnEditFocusLost", function()
+        HideEdit(row, true)
+    end)
+
+    row.valueFrame:SetScript("OnEnter", function(self)
+        row.valueText:SetAlpha(1)
+    end)
+
+    row.valueFrame:SetScript("OnLeave", function(self)
+        row.valueText:SetAlpha(0.85)
+    end)
+
+    row.valueText:SetAlpha(0.85)
 
     row.slider = CreateFrame("Slider", "CursorGlowValueSlider" .. sliderNameIndex, row)
     row.slider:SetOrientation("HORIZONTAL")
@@ -776,6 +892,103 @@ local function CreateValueSlider(parent, labelText, minValue, maxValue, step)
         thumb:SetDrawLayer("OVERLAY", 1)
     end
 
+    if thumb then
+        row.slider.thumbGlow = row.slider:CreateTexture(nil, "ARTWORK", nil, 0)
+        row.slider.thumbGlow:SetPoint("CENTER", thumb, "CENTER", 0, -1)
+        row.slider.thumbGlow:SetSize(30, 30)
+
+        if row.slider.thumbGlow.SetAtlas then
+            row.slider.thumbGlow:SetAtlas("DK-Rune-Glow", false)
+            row.slider.thumbGlow:SetVertexColor(GOLD_TEXT[1], GOLD_TEXT[2], GOLD_TEXT[3], 0.9)
+        else
+            row.slider.thumbGlow:SetTexture("Interface\\Buttons\\WHITE8x8")
+            row.slider.thumbGlow:SetVertexColor(1.0, 0.82, 0.25, 0.20)
+        end
+
+        row.slider.thumbGlow:SetBlendMode("ADD")
+        row.slider.thumbGlow:SetAlpha(0)
+        row.slider.thumbGlow:Show()
+
+        row.slider.thumbGlow.fadeIn = row.slider.thumbGlow:CreateAnimationGroup()
+        local fadeIn = row.slider.thumbGlow.fadeIn:CreateAnimation("Alpha")
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.25)
+        fadeIn:SetOrder(1)
+
+        row.slider.thumbGlow.fadeOut = row.slider.thumbGlow:CreateAnimationGroup()
+        local fadeOut = row.slider.thumbGlow.fadeOut:CreateAnimation("Alpha")
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0)
+        fadeOut:SetDuration(0.25)
+        fadeOut:SetOrder(1)
+
+        row.slider.thumbGlow.isVisible = false
+    end
+
+    row.slider:SetScript("OnUpdate", function(self)
+        if not self.thumbGlow then
+            return
+        end
+
+        local thumbTex = self:GetThumbTexture()
+        if not thumbTex or not thumbTex:IsShown() then
+            if self.thumbGlow.isVisible or self.thumbGlow:GetAlpha() > 0 then
+                if self.thumbGlow.fadeIn:IsPlaying() then
+                    self.thumbGlow.fadeIn:Stop()
+                end
+                if not self.thumbGlow.fadeOut:IsPlaying() then
+                    self.thumbGlow.fadeOut:Play()
+                end
+                self.thumbGlow.isVisible = false
+            end
+            return
+        end
+
+        local mx, my = GetCursorPosition()
+        local scale = UIParent:GetEffectiveScale()
+        mx, my = mx / scale, my / scale
+
+        local left = thumbTex:GetLeft()
+        local right = thumbTex:GetRight()
+        local top = thumbTex:GetTop()
+        local bottom = thumbTex:GetBottom()
+
+        if not (left and right and top and bottom) then
+            return
+        end
+
+        local hoveringThumb = mx >= left and mx <= right and my >= bottom and my <= top
+
+        if hoveringThumb then
+            if not self.thumbGlow.isVisible then
+                if self.thumbGlow.fadeOut:IsPlaying() then
+                    self.thumbGlow.fadeOut:Stop()
+                end
+                self.thumbGlow.fadeIn:Stop()
+                self.thumbGlow.fadeIn:Play()
+                self.thumbGlow.isVisible = true
+            end
+        else
+            if self.thumbGlow.isVisible then
+                if self.thumbGlow.fadeIn:IsPlaying() then
+                    self.thumbGlow.fadeIn:Stop()
+                end
+                self.thumbGlow.fadeOut:Stop()
+                self.thumbGlow.fadeOut:Play()
+                self.thumbGlow.isVisible = false
+            end
+        end
+    end)
+
+    row.slider.thumbGlow.fadeIn:SetScript("OnFinished", function()
+        row.slider.thumbGlow:SetAlpha(1)
+    end)
+
+    row.slider.thumbGlow.fadeOut:SetScript("OnFinished", function()
+        row.slider.thumbGlow:SetAlpha(0)
+    end)
+
     function row:SetDisplayValue(value)
         self.valueText:SetText(FormatNumericValue(value))
     end
@@ -818,11 +1031,11 @@ end
 -- GENERAL PAGE BUILD
 ------------------------------------------------------------------------------------
 local function BuildGeneralPage(self, page)
-    local intro = CreateText(page.body, "GameFontHighlight", "Simple baseline settings for CursorGlow. This reset intentionally removes the previous custom options shell and keeps only a stable foundation.", FONT_STYLES.body)
+    local intro = CreateText(page.body, "GameFontHighlight", "General settings for CursorGlow", FONT_STYLES.body)
     intro:SetPoint("TOPLEFT", 0, 0)
     intro:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
 
-    page.enableRow = CreateCheckboxRow(page.body, "Enable Addon", "Master toggle for CursorGlow.")
+    page.enableRow = CreateCheckboxRow(page.body, "Enable", "Master toggle")
     page.enableRow:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -18)
     page.enableRow:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
     page.enableRow.check:SetScript("OnClick", function(button)
@@ -830,7 +1043,7 @@ local function BuildGeneralPage(self, page)
         page:RefreshControls()
     end)
 
-    page.testModeRow = CreateCheckboxRow(page.body, "Test Mode", "Shows the default glow for placement preview.")
+    page.testModeRow = CreateCheckboxRow(page.body, "Test Mode", "Keeps the default gauntlet glow shown on click for troubleshooting and alignment")
     page.testModeRow:SetPoint("TOPLEFT", page.enableRow, "BOTTOMLEFT", 0, -10)
     page.testModeRow:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
     page.testModeRow.check:SetScript("OnClick", function(button)
@@ -838,7 +1051,7 @@ local function BuildGeneralPage(self, page)
         page:RefreshControls()
     end)
 
-    page.note = CreateText(page.body, "GameFontHighlightSmall", "Additional controls will be rebuilt on top of this simplified panel in later steps.", FONT_STYLES.muted)
+    page.note = CreateText(page.body, "GameFontHighlightSmall", "Additional controls will be added later as needed", FONT_STYLES.muted)
     page.note:SetPoint("TOPLEFT", page.testModeRow, "BOTTOMLEFT", 4, -14)
     page.note:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
 
@@ -872,19 +1085,19 @@ end
 -- APPEARANCE PAGE BUILD
 ------------------------------------------------------------------------------------
 local function BuildAppearancePage(page)
-    page.intro = CreateText(page.body, "GameFontHighlight", "Appearance controls are being rebuilt carefully. This page is a clean staging area for visual settings that can be added safely in later passes.", FONT_STYLES.body)
+    page.intro = CreateText(page.body, "GameFontHighlight", " ", FONT_STYLES.body)
     page.intro:SetPoint("TOPLEFT", 0, 0)
     page.intro:SetPoint("TOPRIGHT", 0, 0)
 
-    page.alphaSection = CreateSectionPanel(page.body, "Glow Alpha", "Placeholder for a future global transparency control. No live alpha setting is wired in this pass to avoid changing the current config or render behavior.")
+    page.alphaSection = CreateSectionPanel(page.body, "Glow Alpha", "Placeholder -  to be added later")
     page.alphaSection:SetPoint("TOPLEFT", page.intro, "BOTTOMLEFT", 0, -18)
     page.alphaSection:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -58)
 
-    page.recolorSection = CreateSectionPanel(page.body, "Recoloring", "Placeholder for future color override controls. Recolor logic is intentionally not reintroduced here while the rebuilt options shell is being completed.")
+    page.recolorSection = CreateSectionPanel(page.body, "Recoloring", "Placeholder -  to be added later")
     page.recolorSection:SetPoint("TOPLEFT", page.alphaSection, "BOTTOMLEFT", 0, -14)
     page.recolorSection:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -190)
 
-    page.previewSection = CreateSectionPanel(page.body, "Preview Behavior", "Placeholder for future preview-specific controls such as live preview rules or temporary display behavior. Existing test mode remains available on the General page.")
+    page.previewSection = CreateSectionPanel(page.body, "Preview Behavior", "Placeholder -  to be added later")
     page.previewSection:SetPoint("TOPLEFT", page.recolorSection, "BOTTOMLEFT", 0, -14)
     page.previewSection:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -322)
 
@@ -904,8 +1117,6 @@ local function RefreshCursorEditor(page)
     if not entry then
         return
     end
-
-    page.editorTitle:SetText(entry.label)
 
     for _, control in ipairs(page.editorControls or {}) do
         local value = GetCursorStateValue(page.owner, page.selectedStateKey, control.controlId)
@@ -928,7 +1139,6 @@ local function SelectCursorState(page, stateKey)
     end
 
     local entry = page.stateLookup[stateKey]
-    page.editorTitle:SetText(entry.label)
     RefreshCursorEditor(page)
 end
 
@@ -945,10 +1155,18 @@ local function BuildCursorsPage(self, page)
     page.leftPanel:SetPoint("TOPLEFT", 0, 0)
     page.leftPanel:SetPoint("BOTTOMLEFT", 0, 0)
     page.leftPanel:SetWidth(CURSORS_LIST_WIDTH)
+    page.leftPanel.bg:Show()
+    page.leftPanel.bg:SetVertexColor(0, 0, 0, 0.22)
 
     page.rightPanel = CreateSimplePanel(page.body)
     page.rightPanel:SetPoint("TOPLEFT", page.leftPanel, "TOPRIGHT", 16, 0)
     page.rightPanel:SetPoint("BOTTOMRIGHT", 0, 0)
+    if page.rightPanel.SetBackdropBorderColor then
+        page.rightPanel:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    if page.rightPanel.innerLine then
+        page.rightPanel.innerLine:Hide()
+    end
 
     page.leftTitle = CreateText(page.leftPanel, "GameFontNormal", "Cursor Types", FONT_STYLES.sectionTitle)
     page.leftTitle:SetPoint("TOPLEFT", 14, -14)
@@ -965,12 +1183,6 @@ local function BuildCursorsPage(self, page)
     page.listContent:SetWidth(CURSORS_LIST_WIDTH - 40)
     page.listScroll:SetScrollChild(page.listContent)
 
-    page.editorTitle = CreateText(page.rightPanel, "GameFontNormalLarge", "", FONT_STYLES.pageTitle)
-    page.editorTitle:SetPoint("TOPLEFT", 18, -16)
-    page.editorTitle:SetPoint("TOPRIGHT", -18, -16)
-
-    page.editorSeparator = CreateSeparator(page.rightPanel, page.editorTitle)
-
     page.editorControls = {}
 
     local previousControl
@@ -980,8 +1192,8 @@ local function BuildCursorsPage(self, page)
             control:SetPoint("TOPLEFT", previousControl, "BOTTOMLEFT", 0, -20)
             control:SetPoint("TOPRIGHT", previousControl, "BOTTOMRIGHT", 0, -20)
         else
-            control:SetPoint("TOPLEFT", page.editorSeparator, "BOTTOMLEFT", 18, -20)
-            control:SetPoint("TOPRIGHT", page.rightPanel, "TOPRIGHT", -26, -50)
+            control:SetPoint("TOPLEFT", page.rightPanel, "TOPLEFT", 36, -34)
+            control:SetPoint("TOPRIGHT", page.rightPanel, "TOPRIGHT", -26, -10)
         end
 
         control.controlId = controlDef.id
@@ -1055,34 +1267,47 @@ end
 -- ABOUT PAGE BUILD
 ------------------------------------------------------------------------------------
 local function BuildAboutPage(page)
-    local version = GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version") or "Unknown"
-    local addonTitle = GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Title") or ADDON_NAME or "CursorGlow"
+    local version = GetAddonVersion(ADDON_NAME)
+    local addonTitle = GetAddonDisplayTitle(ADDON_NAME)
 
     page.summary = CreateSimplePanel(page.body)
     page.summary:SetPoint("TOPLEFT", 0, 0)
     page.summary:SetPoint("TOPRIGHT", 0, 0)
-    page.summary:SetHeight(138)
+    page.summary:SetHeight(112)
+
+    local labelX = 16
+    local valueX = 152
+    local rowTop = -14
+    local rowGap = -10
 
     page.addonLabel = CreateText(page.summary, "GameFontNormal", "Addon Name", FONT_STYLES.sectionTitle)
-    page.addonLabel:SetPoint("TOPLEFT", 16, -16)
+    page.addonLabel:SetPoint("TOPLEFT", labelX, rowTop)
+
     page.addonValue = CreateText(page.summary, "GameFontHighlight", addonTitle, FONT_STYLES.body)
-    page.addonValue:SetPoint("TOPLEFT", page.addonLabel, "TOPRIGHT", 90, 0)
+    page.addonValue:SetPoint("TOPLEFT", valueX, rowTop)
+    page.addonValue:SetPoint("RIGHT", page.summary, "RIGHT", -16, 0)
 
     page.versionLabel = CreateText(page.summary, "GameFontNormal", "Version", FONT_STYLES.sectionTitle)
-    page.versionLabel:SetPoint("TOPLEFT", page.addonLabel, "BOTTOMLEFT", 0, -12)
+    page.versionLabel:SetPoint("TOPLEFT", page.addonLabel, "BOTTOMLEFT", 0, rowGap)
+
     page.versionValue = CreateText(page.summary, "GameFontHighlight", version, FONT_STYLES.body)
-    page.versionValue:SetPoint("TOPLEFT", page.versionLabel, "TOPRIGHT", 90, 0)
+    page.versionValue:SetPoint("TOPLEFT", valueX, -38)
+    page.versionValue:SetPoint("RIGHT", page.summary, "RIGHT", -16, 0)
 
-    page.commandsLabel = CreateText(page.summary, "GameFontNormal", "Slash Commands", FONT_STYLES.sectionTitle)
-    page.commandsLabel:SetPoint("TOPLEFT", page.versionLabel, "BOTTOMLEFT", 0, -12)
+    page.commandsLabel = CreateText(page.summary, "GameFontNormal", "Commands", FONT_STYLES.sectionTitle)
+    page.commandsLabel:SetPoint("TOPLEFT", page.versionLabel, "BOTTOMLEFT", 0, rowGap)
+
     page.commandsValue = CreateText(page.summary, "GameFontHighlight", "/cg or /cursorglow", FONT_STYLES.body)
-    page.commandsValue:SetPoint("TOPLEFT", page.commandsLabel, "TOPRIGHT", 90, 0)
+    page.commandsValue:SetPoint("TOPLEFT", valueX, -62)
+    page.commandsValue:SetPoint("RIGHT", page.summary, "RIGHT", -16, 0)
 
-    page.help = CreateSectionPanel(page.body, "Notes", "Use the General page for core addon toggles and the Cursors page to adjust per-state size and offset values. Appearance is scaffolded separately so visual options can be added incrementally without risking the current working behavior.")
-    page.help:SetPoint("TOPLEFT", page.summary, "BOTTOMLEFT", 0, -16)
-    page.help:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -144)
+    page.help = CreateSectionPanel(page.body, "Notes", "Placeholder -  to be added later")
+    page.help:SetPoint("TOPLEFT", page.summary, "BOTTOMLEFT", 0, -12)
+    page.help:SetPoint("TOPRIGHT", page.body, "TOPRIGHT", 0, -124)
 
-    page.RefreshControls = function()
+    page.RefreshControls = function(currentPage)
+        currentPage.addonValue:SetText(GetAddonDisplayTitle(ADDON_NAME))
+        currentPage.versionValue:SetText(GetAddonVersion(ADDON_NAME))
     end
 end
 
@@ -1288,11 +1513,13 @@ local function CreateConfigFrame(self)
     ------------------------------------------------------------------------------------
     -- PAGE LAYOUT
     ------------------------------------------------------------------------------------
-    frame.contentDivider = frame:CreateTexture(nil, "BORDER")
-    frame.contentDivider:SetColorTexture(1, 1, 1, 0.08)
-    frame.contentDivider:SetPoint("TOPLEFT", frame.navFrame, "TOPRIGHT", 12, 0)
-    frame.contentDivider:SetPoint("BOTTOMLEFT", frame.navFrame, "BOTTOMRIGHT", 12, 0)
+    local dividerParent = frame.Inset or frame
+    
+    frame.contentDivider = frame.surfaceHost:CreateTexture(nil, "OVERLAY", nil, 1)
     frame.contentDivider:SetWidth(1)
+    frame.contentDivider:SetColorTexture(1.0, 0.84, 0.38, 0.06)
+    frame.contentDivider:SetPoint("TOPLEFT", frame.navFrame, "TOPRIGHT", 12, -2)
+    frame.contentDivider:SetPoint("BOTTOMLEFT", frame.navFrame, "BOTTOMRIGHT", 12, 2)
 
     frame.content = CreateFrame("Frame", nil, frame.Inset or frame)
     frame.content:SetPoint("TOPLEFT", frame.navFrame, "TOPRIGHT", 24, 0)
