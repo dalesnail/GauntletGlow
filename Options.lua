@@ -59,9 +59,10 @@ local FONT_STYLES = {
 -- PAGE DEFINITIONS
 ------------------------------------------------------------------------------------
 local PAGES = {
-    { key = "general", title = "General" },
+    { key = "general", title = "General", subtitle = "Core addon controls and basic troubleshooting options", compactHeader = true },
     { key = "cursors", title = "Cursors", subtitle = "Tweak cursors size and position" },
-    { key = "appearance", title = "Appearance" },
+    { key = "appearance", title = "Appearance", subtitle = "Global appearance controls for every cursor state" },
+    { key = "effects", title = "Effects", subtitle = "Player-state effects layer over the active cursor glow" },
     { key = "about", title = "About" },
 }
 
@@ -83,7 +84,7 @@ local CURSOR_STATE_ORDER = {
     "INNKEEPER",
     "STABLEMASTER",
     "MAILBOX",
-    "BANKER",
+    "FINANCE",
     "SKINNABLE",
     "VENDOR",
     "SELL_ITEM",
@@ -94,7 +95,7 @@ local CURSOR_STATE_LABELS = {
     AUTOLOOT = "Auto Loot",
     FLIGHTMASTER = "Flight Master",
     STABLEMASTER = "Stable Master",
-    BANKER = "Banker",
+    FINANCE = "Finance",
     SPEAK = "Speak",
     SELL_ITEM = "Sell Item",
     REPAIR_VENDOR = "Repair Vendor",
@@ -185,7 +186,7 @@ local CURSOR_STATE_CONFIG = {
         offsetXKey = "mailboxOffsetX",
         offsetYKey = "mailboxOffsetY",
     },
-    BANKER = {
+    FINANCE = {
         widthKey = "bankerSizeX",
         heightKey = "bankerSizeY",
         offsetXKey = "bankerOffsetX",
@@ -231,7 +232,24 @@ local CURSOR_DEFAULT_FIELDS = {
     offsetY = "offsetY",
 }
 
+local PLAYER_STATE_EFFECT_ORDER = (ns.PlayerStateEffects and ns.PlayerStateEffects.order) or {
+    "COMBAT",
+    "LOW_HEALTH",
+    "MOUNTED",
+    "RESTING",
+}
+
+local PLAYER_STATE_EFFECT_SLIDER_DEFS = {
+    { id = "tintStrength", label = "Tint Strength", min = 0.0, max = 1.0, step = 0.05 },
+    { id = "brightness", label = "Brightness", min = 0.50, max = 2.00, step = 0.05 },
+    { id = "alpha", label = "Alpha", min = 0.05, max = 1.00, step = 0.05 },
+    { id = "pulseSpeed", label = "Pulse Speed", min = 0.45, max = 1.35, step = 0.05 },
+    { id = "pulseStrength", label = "Pulse Strength", min = 0.00, max = 1.00, step = 0.05 },
+    { id = "transitionSpeed", label = "Transition Speed", min = 1.00, max = 12.00, step = 0.25 },
+}
+
 local sliderNameIndex = 0
+local dropdownNameIndex = 0
 
 ------------------------------------------------------------------------------------
 -- VERSION HELPER FUNCTION
@@ -354,6 +372,10 @@ local function EvaluateAndApplyCurrentState(self)
     if visible and state then
         self:ApplyState(state, true)
     end
+
+    if self.UpdatePlayerStateEffect then
+        self:UpdatePlayerStateEffect()
+    end
 end
 
 local function GetAddonEnabled(self)
@@ -382,6 +404,9 @@ local function SetTestModeEnabled(self, enabled)
     if enabled then
         self:ApplyVisibility(true)
         self:ApplyState("DEFAULT", true)
+        if self.UpdatePlayerStateEffect then
+            self:UpdatePlayerStateEffect()
+        end
         return
     end
 
@@ -661,6 +686,17 @@ local function GetCursorStateEntries()
             }
         end
     end
+
+    table.sort(entries, function(left, right)
+        local leftLabel = strlower(left.label or "")
+        local rightLabel = strlower(right.label or "")
+
+        if leftLabel == rightLabel then
+            return (left.key or "") < (right.key or "")
+        end
+
+        return leftLabel < rightLabel
+    end)
 
     return entries
 end
@@ -1030,23 +1066,33 @@ local function CreatePage(parent, pageData)
     page:SetAllPoints()
     page:Hide()
 
+    local headerHeight = pageData.subtitle and PAGE_HEADER_HEIGHT or 28
+    local subtitleOffset = -6
+    local bodyOffset = -18
+
+    if pageData.compactHeader and pageData.subtitle then
+        headerHeight = PAGE_HEADER_HEIGHT - 4
+        subtitleOffset = -4
+        bodyOffset = -14
+    end
+
     page.header = CreateFrame("Frame", nil, page)
     page.header:SetPoint("TOPLEFT", PAGE_INSET_X, PAGE_HEADER_TOP)
     page.header:SetPoint("TOPRIGHT", -PAGE_INSET_X, PAGE_HEADER_TOP)
-    page.header:SetHeight(pageData.subtitle and PAGE_HEADER_HEIGHT or 28)
+    page.header:SetHeight(headerHeight)
 
     page.title = CreateText(page.header, "GameFontNormalLarge", pageData.title, FONT_STYLES.pageTitle)
     page.title:SetPoint("TOPLEFT", 0, 0)
     page.title:SetPoint("TOPRIGHT", 0, 0)
     if pageData.subtitle then
         page.subtitle = CreateText(page.header, "GameFontHighlight", pageData.subtitle, FONT_STYLES.pageSubtitle)
-        page.subtitle:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -6)
-        page.subtitle:SetPoint("TOPRIGHT", page.title, "BOTTOMRIGHT", 0, -6)
+        page.subtitle:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, subtitleOffset)
+        page.subtitle:SetPoint("TOPRIGHT", page.title, "BOTTOMRIGHT", 0, subtitleOffset)
     end
 
     page.body = CreateFrame("Frame", nil, page)
-    page.body:SetPoint("TOPLEFT", page.header, "BOTTOMLEFT", 0, -18)
-    page.body:SetPoint("TOPRIGHT", page.header, "BOTTOMRIGHT", 0, -18)
+    page.body:SetPoint("TOPLEFT", page.header, "BOTTOMLEFT", 0, bodyOffset)
+    page.body:SetPoint("TOPRIGHT", page.header, "BOTTOMRIGHT", 0, bodyOffset)
     page.body:SetPoint("BOTTOMLEFT", PAGE_INSET_X, 0)
     page.body:SetPoint("BOTTOMRIGHT", -PAGE_INSET_X, 0)
 
@@ -1057,12 +1103,8 @@ end
 -- GENERAL PAGE BUILD
 ------------------------------------------------------------------------------------
 local function BuildGeneralPage(self, page)
-    local intro = CreateText(page.body, "GameFontHighlight", "General settings for GauntletGlow", FONT_STYLES.body)
-    intro:SetPoint("TOPLEFT", 0, 0)
-    intro:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
-
     page.enableRow = CreateCheckboxRow(page.body, "Enable", "Master toggle")
-    page.enableRow:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -18)
+    page.enableRow:SetPoint("TOPLEFT", 0, 0)
     page.enableRow:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
     page.enableRow.check:SetScript("OnClick", function(button)
         SetAddonEnabled(self, button:GetChecked())
@@ -1093,6 +1135,8 @@ end
 local function CreateSectionPanel(parent, title, bodyText)
     local panel = CreateSimplePanel(parent)
     panel:SetHeight(126)
+    panel.bg:Show()
+    panel.bg:SetVertexColor(0, 0, 0, 0.22)
 
     panel.title = CreateText(panel, "GameFontNormal", title, FONT_STYLES.sectionTitle)
     panel.title:SetPoint("TOPLEFT", 16, -14)
@@ -1460,6 +1504,198 @@ local function OpenAppearanceColorPicker(self, onChanged)
     ColorPickerFrame:Show()
 end
 
+local function GetPlayerStateEffectData()
+    return ns.PlayerStateEffects or {}
+end
+
+local function GetPlayerStateEffectLabel(effectKey)
+    local effectData = GetPlayerStateEffectData()
+    local labels = effectData.labels or {}
+    return labels[effectKey] or FormatCursorStateLabel(effectKey)
+end
+
+local function GetPlayerStateEffectProfile(self, effectKey)
+    if not self or not self.db or not self.db.profile then
+        return nil
+    end
+
+    if self.GetPlayerStateEffectProfile then
+        local existingProfile = self:GetPlayerStateEffectProfile(effectKey)
+        if existingProfile then
+            return existingProfile
+        end
+    end
+
+    self.db.profile.effects = self.db.profile.effects or {}
+    self.db.profile.effects.playerStates = self.db.profile.effects.playerStates or {}
+    self.db.profile.effects.playerStates[effectKey] = self.db.profile.effects.playerStates[effectKey] or {}
+
+    return self.db.profile.effects.playerStates[effectKey]
+end
+
+local function GetPlayerStateEffectDefault(effectKey, valueKey)
+    local effectData = GetPlayerStateEffectData()
+    local defaults = effectData.defaults and effectData.defaults[effectKey]
+    if defaults and defaults[valueKey] ~= nil then
+        return defaults[valueKey]
+    end
+
+    local neutral = effectData.neutral or {}
+    return neutral[valueKey]
+end
+
+local function GetPlayerStateEffectValue(self, effectKey, valueKey)
+    if self and self.GetPlayerStateEffectValue then
+        local value = self:GetPlayerStateEffectValue(effectKey, valueKey)
+        if value ~= nil then
+            return value
+        end
+    end
+
+    return GetPlayerStateEffectDefault(effectKey, valueKey)
+end
+
+local function RefreshPlayerStateEffects(self)
+    if self.UpdatePlayerStateEffect then
+        self:UpdatePlayerStateEffect()
+    end
+
+    if self.RefreshPlayerStateEffectTarget then
+        self:RefreshPlayerStateEffectTarget()
+    elseif self.RefreshGlowAppearance then
+        self:RefreshGlowAppearance()
+    end
+end
+
+local function SetPlayerStateEffectValue(self, effectKey, valueKey, value)
+    local effectProfile = GetPlayerStateEffectProfile(self, effectKey)
+    if not effectProfile then
+        return
+    end
+
+    effectProfile[valueKey] = value
+    if valueKey == "alpha" then
+        effectProfile.alphaEnabled = nil
+    end
+    RefreshPlayerStateEffects(self)
+end
+
+local function SetPlayerStateEffectColor(self, effectKey, r, g, b)
+    local effectProfile = GetPlayerStateEffectProfile(self, effectKey)
+    if not effectProfile then
+        return
+    end
+
+    effectProfile.colorR = r or 1
+    effectProfile.colorG = g or 1
+    effectProfile.colorB = b or 1
+    RefreshPlayerStateEffects(self)
+end
+
+local function ResetPlayerStateEffectToDefaults(self, effectKey)
+    local effectProfile = GetPlayerStateEffectProfile(self, effectKey)
+    if not effectProfile then
+        return
+    end
+
+    local effectData = GetPlayerStateEffectData()
+    local defaults = effectData.defaults and effectData.defaults[effectKey]
+    if not defaults then
+        return
+    end
+
+    for key, value in pairs(defaults) do
+        effectProfile[key] = value
+    end
+
+    effectProfile.alphaEnabled = nil
+
+    RefreshPlayerStateEffects(self)
+end
+
+local function OpenPlayerStateEffectColorPicker(self, effectKey, onChanged)
+    if not ColorPickerFrame then
+        return
+    end
+
+    local initialR = GetPlayerStateEffectValue(self, effectKey, "colorR") or 1
+    local initialG = GetPlayerStateEffectValue(self, effectKey, "colorG") or 1
+    local initialB = GetPlayerStateEffectValue(self, effectKey, "colorB") or 1
+
+    local function ApplyPickerColor(colorData)
+        local r, g, b = GetColorPickerRGB(colorData)
+        if r == nil or g == nil or b == nil then
+            return
+        end
+
+        SetPlayerStateEffectColor(self, effectKey, r, g, b)
+
+        if onChanged then
+            onChanged()
+        end
+    end
+
+    local function CancelPickerColor(previousValues)
+        local r, g, b = GetColorDataRGB(previousValues)
+        if r == nil or g == nil or b == nil then
+            r, g, b = initialR, initialG, initialB
+        end
+
+        SetPlayerStateEffectColor(self, effectKey, r, g, b)
+
+        if onChanged then
+            onChanged()
+        end
+    end
+
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        local info = {}
+        info.r = initialR
+        info.g = initialG
+        info.b = initialB
+        info.hasOpacity = false
+        info.swatchFunc = function(...)
+            ApplyPickerColor(select(1, ...))
+        end
+        info.cancelFunc = function(previousValues)
+            CancelPickerColor(previousValues)
+        end
+        ColorPickerFrame:SetupColorPickerAndShow(info)
+        return
+    end
+
+    ColorPickerFrame.func = function(...)
+        ApplyPickerColor(select(1, ...))
+    end
+    ColorPickerFrame.opacityFunc = nil
+    ColorPickerFrame.cancelFunc = function(previousValues)
+        CancelPickerColor(previousValues)
+    end
+    ColorPickerFrame.hasOpacity = false
+    ColorPickerFrame.opacity = 1
+    ColorPickerFrame.previousValues = { r = initialR, g = initialG, b = initialB }
+    ColorPickerFrame:SetColorRGB(initialR, initialG, initialB)
+    ColorPickerFrame:Hide()
+    ColorPickerFrame:Show()
+end
+
+local function CreateCompactDropdown(parent, width)
+    dropdownNameIndex = dropdownNameIndex + 1
+
+    local dropdown = CreateFrame("Frame", "GauntletGlowDropdown" .. dropdownNameIndex, parent, "UIDropDownMenuTemplate")
+    dropdown:SetWidth(width or 180)
+
+    if UIDropDownMenu_SetWidth then
+        UIDropDownMenu_SetWidth(dropdown, width or 180)
+    end
+
+    if UIDropDownMenu_SetText then
+        UIDropDownMenu_SetText(dropdown, "")
+    end
+
+    return dropdown
+end
+
 ------------------------------------------------------------------------------------
 -- APPEARANCE PAGE BUILD
 ------------------------------------------------------------------------------------
@@ -1475,7 +1711,7 @@ local function BuildAppearancePage(self, page)
     local toggleRegionWidth = 170
 
     local function UpdateAppearanceScrollLayout()
-        if not page.scrollFrame or not page.scrollContent or not page.intro then
+        if not page.scrollFrame or not page.scrollContent then
             return
         end
 
@@ -1483,10 +1719,7 @@ local function BuildAppearancePage(self, page)
         local viewportHeight = math.max(page.scrollFrame:GetHeight(), 1)
         page.scrollContent:SetWidth(contentWidth)
 
-        local introHeight = math.max(page.intro:GetStringHeight() or 0, page.intro:GetHeight() or 0, 0)
-        local totalHeight = introHeight
-            + introGap
-            + page.recolorSection:GetHeight()
+        local totalHeight = page.recolorSection:GetHeight()
             + sectionGap
             + page.brightnessSection:GetHeight()
             + sectionGap
@@ -1507,13 +1740,9 @@ local function BuildAppearancePage(self, page)
     page.scrollFrame:SetScript("OnSizeChanged", UpdateAppearanceScrollLayout)
     page:SetScript("OnShow", UpdateAppearanceScrollLayout)
 
-    page.intro = CreateText(page.scrollContent, "GameFontHighlight", "Global appearance controls apply to every cursor state without changing its texture, size, or offset rules.", FONT_STYLES.body)
-    page.intro:SetPoint("TOPLEFT", 0, 0)
-    page.intro:SetPoint("TOPRIGHT", 0, 0)
-
     page.recolorSection = CreateSectionPanel(page.scrollContent, "Color", "")
-    page.recolorSection:SetPoint("TOPLEFT", page.intro, "BOTTOMLEFT", 0, -introGap)
-    page.recolorSection:SetPoint("TOPRIGHT", page.intro, "BOTTOMRIGHT", 0, -18)
+    page.recolorSection:SetPoint("TOPLEFT", page.scrollContent, "TOPLEFT", 0, 0)
+    page.recolorSection:SetPoint("TOPRIGHT", page.scrollContent, "TOPRIGHT", 0, 0)
     page.recolorSection:SetHeight(126)
     page.recolorSection.bodyText:SetText("")
     page.recolorSection.bodyText:Hide()
@@ -1649,6 +1878,335 @@ local function BuildAppearancePage(self, page)
         SetInlineCheckboxStableEnabled(currentPage.alphaToggle, true)
         SetValueSliderEnabled(currentPage.alphaSlider, useGlobalAlpha)
         UpdateAppearanceScrollLayout()
+    end
+end
+
+local function BuildEffectsPage(self, page)
+    local function RoundEffectValue(value, step)
+        local roundedValue = math.floor((value / step) + 0.5) * step
+        return tonumber(string.format("%.2f", roundedValue))
+    end
+
+    local sectionBottomPadding = 12
+    local controlGap = 18
+    local effectSliderDefsById = {}
+
+    for _, sliderDef in ipairs(PLAYER_STATE_EFFECT_SLIDER_DEFS) do
+        effectSliderDefsById[sliderDef.id] = sliderDef
+    end
+
+    local function UpdateEffectsScrollLayout()
+        if not page.scrollFrame or not page.scrollContent then
+            return
+        end
+
+        local contentWidth = math.max(page.scrollFrame:GetWidth(), 1)
+        local viewportHeight = math.max(page.scrollFrame:GetHeight(), 1)
+        page.scrollContent:SetWidth(contentWidth)
+
+        if page.playerStateSection and page.resetButton then
+            local sectionTop = page.playerStateSection:GetTop()
+            local resetButtonBottom = page.resetButton:GetBottom()
+            if sectionTop and resetButtonBottom then
+                page.playerStateSection:SetHeight(math.max(1, math.floor((sectionTop - resetButtonBottom) + sectionBottomPadding + 0.5)))
+            end
+        end
+
+        local totalHeight = page.playerStateSection:GetHeight()
+            + sectionBottomPadding
+
+        page.scrollContent:SetHeight(math.max(viewportHeight, totalHeight))
+    end
+
+    local function SetSelectedEffect(effectKey)
+        if not effectKey then
+            effectKey = PLAYER_STATE_EFFECT_ORDER[1]
+        end
+
+        page.selectedEffectKey = effectKey
+
+        if UIDropDownMenu_SetSelectedValue then
+            UIDropDownMenu_SetSelectedValue(page.stateDropdown, effectKey)
+        end
+
+        if UIDropDownMenu_SetText then
+            UIDropDownMenu_SetText(page.stateDropdown, GetPlayerStateEffectLabel(effectKey))
+        end
+    end
+
+    local function CreateEffectSlider(controlKey)
+        local sliderDef = effectSliderDefsById[controlKey]
+        local slider = CreateValueSlider(page.playerStateSection, sliderDef.label, sliderDef.min, sliderDef.max, sliderDef.step)
+        slider.slider:SetScript("OnValueChanged", function(_, value)
+            if slider.isUpdating or not page.selectedEffectKey then
+                return
+            end
+
+            local clampedValue = math.max(sliderDef.min, math.min(sliderDef.max, value))
+            local roundedValue = RoundEffectValue(clampedValue, sliderDef.step)
+            slider:SetDisplayValue(roundedValue)
+            SetPlayerStateEffectValue(self, page.selectedEffectKey, controlKey, roundedValue)
+        end)
+
+        page[controlKey .. "Slider"] = slider
+        return slider
+    end
+
+    local function RefreshEffectSlider(currentPage, effectKey, controlKey)
+        local sliderDef = effectSliderDefsById[controlKey]
+        local control = currentPage[controlKey .. "Slider"]
+        if not sliderDef or not control then
+            return
+        end
+
+        local currentValue = GetPlayerStateEffectValue(self, effectKey, controlKey) or sliderDef.min
+        local roundedValue = RoundEffectValue(math.max(sliderDef.min, math.min(sliderDef.max, currentValue)), sliderDef.step)
+        control.isUpdating = true
+        control.slider:SetValue(roundedValue)
+        control:SetDisplayValue(roundedValue)
+        control.isUpdating = false
+    end
+
+    local function SetButtonEnabled(button, enabled)
+        if not button then
+            return
+        end
+
+        if enabled then
+            button:Enable()
+            button:SetAlpha(1)
+        else
+            button:Disable()
+            button:SetAlpha(0.55)
+        end
+    end
+
+    local function SetEffectLabelEnabled(label, enabled)
+        ApplyFont(
+            label,
+            FONT_STYLES.sectionTitle.template,
+            FONT_STYLES.sectionTitle.size,
+            FONT_STYLES.sectionTitle.flags,
+            enabled and FONT_STYLES.sectionTitle.color or MUTED_TEXT,
+            FONT_STYLES.sectionTitle.shadow
+        )
+        label:SetAlpha(enabled and 1 or 0.8)
+    end
+
+    page.scrollFrame = CreateFrame("ScrollFrame", nil, page.body, "UIPanelScrollFrameTemplate")
+    page.scrollFrame:SetPoint("TOPLEFT", page.body, "TOPLEFT", 0, 0)
+    page.scrollFrame:SetPoint("BOTTOMRIGHT", page.body, "BOTTOMRIGHT", -28, 0)
+
+    page.scrollContent = CreateFrame("Frame", nil, page.scrollFrame)
+    page.scrollContent:SetPoint("TOPLEFT", 0, 0)
+    page.scrollContent:SetSize(1, 1)
+    page.scrollFrame:SetScrollChild(page.scrollContent)
+    page.scrollFrame:SetScript("OnSizeChanged", UpdateEffectsScrollLayout)
+    page:SetScript("OnShow", UpdateEffectsScrollLayout)
+
+    page.playerStateSection = CreateSectionPanel(page.scrollContent, "Player State Effects", "")
+    page.playerStateSection:SetPoint("TOPLEFT", page.scrollContent, "TOPLEFT", 0, 0)
+    page.playerStateSection:SetPoint("TOPRIGHT", page.scrollContent, "TOPRIGHT", 0, 0)
+    page.playerStateSection:SetHeight(1)
+    page.playerStateSection.bodyText:SetText("")
+    page.playerStateSection.bodyText:Hide()
+
+    page.topRow = CreateFrame("Frame", nil, page.playerStateSection)
+    page.topRow:SetPoint("TOPLEFT", page.playerStateSection.separator, "BOTTOMLEFT", 0, -10)
+    page.topRow:SetPoint("TOPRIGHT", page.playerStateSection.separator, "BOTTOMRIGHT", 0, -10)
+    page.topRow:SetHeight(28)
+
+    page.stateLabel = CreateText(page.topRow, "GameFontNormal", "Player State", FONT_STYLES.sectionTitle)
+    page.stateLabel:SetPoint("LEFT", page.topRow, "LEFT", 0, -1)
+    page.stateLabel:SetWidth(90)
+    page.stateLabel:SetJustifyV("MIDDLE")
+
+    page.stateDropdown = CreateCompactDropdown(page.topRow, 180)
+    page.stateDropdown:SetPoint("LEFT", page.stateLabel, "RIGHT", -2, 1)
+
+    if UIDropDownMenu_Initialize then
+        UIDropDownMenu_Initialize(page.stateDropdown, function(_, level)
+            if level ~= 1 then
+                return
+            end
+
+            for _, effectKey in ipairs(PLAYER_STATE_EFFECT_ORDER) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = GetPlayerStateEffectLabel(effectKey)
+                info.value = effectKey
+                info.checked = page.selectedEffectKey == effectKey
+                info.func = function(button)
+                    SetSelectedEffect(button.value)
+                    page:RefreshControls()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+    end
+
+    page.colorSwatch = CreateColorSwatchButton(page.topRow)
+    page.colorSwatch:SetPoint("RIGHT", page.topRow, "RIGHT", 0, 0)
+    page.colorSwatch:SetScript("OnClick", function()
+        if not page.selectedEffectKey or not GetPlayerStateEffectValue(self, page.selectedEffectKey, "enabled") then
+            return
+        end
+
+        OpenPlayerStateEffectColorPicker(self, page.selectedEffectKey, function()
+            page:RefreshControls()
+        end)
+    end)
+
+    page.colorLabel = CreateText(page.topRow, "GameFontNormal", "Color", FONT_STYLES.sectionTitle)
+    page.colorLabel:SetPoint("RIGHT", page.colorSwatch, "LEFT", -10, -1)
+    page.colorLabel:SetJustifyV("MIDDLE")
+
+    page.previewToggle = CreateInlineCheckbox(page.topRow, "Test")
+    page.previewToggle:SetPoint("RIGHT", page.colorLabel, "LEFT", -24, 0)
+    page.previewToggle:SetWidth(76)
+    page.previewToggle.check:SetScript("OnClick", function(button)
+        if not page.selectedEffectKey or not self.SetPlayerStateEffectPreview then
+            return
+        end
+
+        self:SetPlayerStateEffectPreview(page.selectedEffectKey, button:GetChecked() and true or false)
+        page:RefreshControls()
+    end)
+
+    page.toggleRow = CreateFrame("Frame", nil, page.playerStateSection)
+    page.toggleRow:SetPoint("TOPLEFT", page.topRow, "BOTTOMLEFT", 0, -12)
+    page.toggleRow:SetPoint("TOPRIGHT", page.topRow, "BOTTOMRIGHT", 0, -12)
+    page.toggleRow:SetHeight(28)
+
+    page.enableToggle = CreateInlineCheckbox(page.toggleRow, "Enable")
+    page.enableToggle:SetPoint("LEFT", page.toggleRow, "LEFT", 0, 0)
+    page.enableToggle:SetWidth(96)
+    page.enableToggle.check:SetScript("OnClick", function(button)
+        if not page.selectedEffectKey then
+            return
+        end
+
+        SetPlayerStateEffectValue(self, page.selectedEffectKey, "enabled", button:GetChecked() and true or false)
+        if not button:GetChecked() and self.IsPlayerStateEffectPreviewActive
+            and self:IsPlayerStateEffectPreviewActive(page.selectedEffectKey)
+            and self.SetPlayerStateEffectPreview then
+            self:SetPlayerStateEffectPreview(page.selectedEffectKey, false)
+        end
+        page:RefreshControls()
+    end)
+
+    page.pulseToggle = CreateInlineCheckbox(page.toggleRow, "Pulse")
+    page.pulseToggle:SetPoint("LEFT", page.enableToggle, "RIGHT", 18, 0)
+    page.pulseToggle:SetWidth(88)
+    page.pulseToggle.check:SetScript("OnClick", function(button)
+        if not page.selectedEffectKey then
+            return
+        end
+
+        SetPlayerStateEffectValue(self, page.selectedEffectKey, "pulseEnabled", button:GetChecked() and true or false)
+        page:RefreshControls()
+    end)
+
+    page.desaturateToggle = CreateInlineCheckbox(page.toggleRow, "Desaturate")
+    page.desaturateToggle:SetPoint("LEFT", page.pulseToggle, "RIGHT", 18, 0)
+    page.desaturateToggle:SetWidth(120)
+    page.desaturateToggle.check:SetScript("OnClick", function(button)
+        if not page.selectedEffectKey then
+            return
+        end
+
+        SetPlayerStateEffectValue(self, page.selectedEffectKey, "desaturate", button:GetChecked() and true or false)
+        page:RefreshControls()
+    end)
+
+    page.primarySliderRow = CreateFrame("Frame", nil, page.playerStateSection)
+    page.primarySliderRow:SetPoint("TOPLEFT", page.toggleRow, "BOTTOMLEFT", 0, -14)
+    page.primarySliderRow:SetPoint("TOPRIGHT", page.toggleRow, "BOTTOMRIGHT", 0, -14)
+    page.primarySliderRow:SetHeight(60)
+
+    page.tintStrengthSlider = CreateEffectSlider("tintStrength")
+    page.tintStrengthSlider:SetPoint("TOPLEFT", page.primarySliderRow, "TOPLEFT", 0, 0)
+    page.tintStrengthSlider:SetWidth(170)
+
+    page.brightnessSlider = CreateEffectSlider("brightness")
+    page.brightnessSlider:SetPoint("TOPLEFT", page.tintStrengthSlider, "TOPRIGHT", controlGap, 0)
+    page.brightnessSlider:SetWidth(170)
+
+    page.alphaSlider = CreateEffectSlider("alpha")
+    page.alphaSlider:SetPoint("TOPLEFT", page.brightnessSlider, "TOPRIGHT", controlGap, 0)
+    page.alphaSlider:SetPoint("TOPRIGHT", page.primarySliderRow, "TOPRIGHT", 0, 0)
+
+    page.secondarySliderRow = CreateFrame("Frame", nil, page.playerStateSection)
+    page.secondarySliderRow:SetPoint("TOPLEFT", page.primarySliderRow, "BOTTOMLEFT", 0, -12)
+    page.secondarySliderRow:SetPoint("TOPRIGHT", page.primarySliderRow, "BOTTOMRIGHT", 0, -12)
+    page.secondarySliderRow:SetHeight(60)
+
+    page.pulseSpeedSlider = CreateEffectSlider("pulseSpeed")
+    page.pulseSpeedSlider:SetPoint("TOPLEFT", page.secondarySliderRow, "TOPLEFT", 0, 0)
+    page.pulseSpeedSlider:SetWidth(170)
+
+    page.pulseStrengthSlider = CreateEffectSlider("pulseStrength")
+    page.pulseStrengthSlider:SetPoint("TOPLEFT", page.pulseSpeedSlider, "TOPRIGHT", controlGap, 0)
+    page.pulseStrengthSlider:SetWidth(170)
+
+    page.transitionSpeedSlider = CreateEffectSlider("transitionSpeed")
+    page.transitionSpeedSlider:SetPoint("TOPLEFT", page.pulseStrengthSlider, "TOPRIGHT", controlGap, 0)
+    page.transitionSpeedSlider:SetPoint("TOPRIGHT", page.secondarySliderRow, "TOPRIGHT", 0, 0)
+
+    page.resetButton = CreateFrame("Button", nil, page.playerStateSection, "UIPanelButtonTemplate")
+    page.resetButton:SetSize(120, 24)
+    page.resetButton:SetText("Reset to Default")
+    page.resetButton:SetPoint("TOPLEFT", page.secondarySliderRow, "BOTTOMLEFT", 2, -18)
+    page.resetButton:SetScript("OnClick", function()
+        if not page.selectedEffectKey then
+            return
+        end
+
+        ResetPlayerStateEffectToDefaults(self, page.selectedEffectKey)
+        page:RefreshControls()
+    end)
+
+    page.RefreshControls = function(currentPage)
+        if not currentPage.selectedEffectKey then
+            currentPage.selectedEffectKey = PLAYER_STATE_EFFECT_ORDER[1]
+        end
+
+        SetSelectedEffect(currentPage.selectedEffectKey)
+
+        local effectKey = currentPage.selectedEffectKey
+        local enabled = GetPlayerStateEffectValue(self, effectKey, "enabled") and true or false
+        local pulseEnabled = enabled and (GetPlayerStateEffectValue(self, effectKey, "pulseEnabled") and true or false) or false
+        local colorR = GetPlayerStateEffectValue(self, effectKey, "colorR") or 1
+        local colorG = GetPlayerStateEffectValue(self, effectKey, "colorG") or 1
+        local colorB = GetPlayerStateEffectValue(self, effectKey, "colorB") or 1
+        local previewActive = (self.GetPlayerStateEffectPreviewKey and self:GetPlayerStateEffectPreviewKey() == effectKey) and true or false
+
+        currentPage.enableToggle.check:SetChecked(enabled)
+        SetInlineCheckboxStableEnabled(currentPage.enableToggle, true)
+
+        currentPage.colorSwatch:SetSwatchColor(colorR, colorG, colorB)
+        currentPage.colorSwatch:SetEnabledState(enabled)
+        SetEffectLabelEnabled(currentPage.colorLabel, enabled)
+        StyleText(currentPage.stateLabel, FONT_STYLES.sectionTitle)
+
+        for _, sliderData in ipairs(PLAYER_STATE_EFFECT_SLIDER_DEFS) do
+            RefreshEffectSlider(currentPage, effectKey, sliderData.id)
+        end
+
+        currentPage.pulseToggle.check:SetChecked(GetPlayerStateEffectValue(self, effectKey, "pulseEnabled") and true or false)
+        currentPage.desaturateToggle.check:SetChecked(GetPlayerStateEffectValue(self, effectKey, "desaturate") and true or false)
+        currentPage.previewToggle.check:SetChecked(previewActive)
+        SetInlineCheckboxStableEnabled(currentPage.pulseToggle, enabled)
+        SetInlineCheckboxStableEnabled(currentPage.desaturateToggle, enabled)
+        SetInlineCheckboxStableEnabled(currentPage.previewToggle, enabled)
+        SetValueSliderEnabled(currentPage.tintStrengthSlider, enabled)
+        SetValueSliderEnabled(currentPage.brightnessSlider, enabled)
+        SetValueSliderEnabled(currentPage.alphaSlider, enabled)
+        SetValueSliderEnabled(currentPage.pulseSpeedSlider, pulseEnabled)
+        SetValueSliderEnabled(currentPage.pulseStrengthSlider, pulseEnabled)
+        SetValueSliderEnabled(currentPage.transitionSpeedSlider, enabled)
+        SetButtonEnabled(currentPage.resetButton, enabled)
+
+        UpdateEffectsScrollLayout()
     end
 end
 
@@ -1821,6 +2379,8 @@ local function BuildAboutPage(page)
     page.summary:SetPoint("TOPLEFT", 0, 0)
     page.summary:SetPoint("TOPRIGHT", 0, 0)
     page.summary:SetHeight(112)
+    page.summary.bg:Show()
+    page.summary.bg:SetVertexColor(0, 0, 0, 0.22)
 
     local labelX = 16
     local valueX = 152
@@ -2100,6 +2660,8 @@ local function CreateConfigFrame(self)
             BuildCursorsPage(self, page)
         elseif pageData.key == "appearance" then
             BuildAppearancePage(self, page)
+        elseif pageData.key == "effects" then
+            BuildEffectsPage(self, page)
         elseif pageData.key == "about" then
             BuildAboutPage(page)
         end

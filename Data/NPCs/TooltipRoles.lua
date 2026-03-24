@@ -66,11 +66,13 @@ ns.Data["TOOLTIP_ROLE_KEYWORDS"] = {
         contains = {}
     },
 
-    BANKER = {
+    FINANCE = {
         exact = {
             ["Banker"] = true,
         },
-        contains = {}
+        contains = {
+            "Auctioneer",
+        }
     },
 
     SKINNABLE = {
@@ -84,6 +86,8 @@ ns.Data["TOOLTIP_ROLE_KEYWORDS"] = {
         exact = {
             ["General Goods and Repairs"] = true,
             ["General Goods and Repair"] = true,
+
+            ["Argent Quartermaster Lightspark"] = true,
 
             ["Armorer"] = true,
             ["Apprentice Armorer"] = true,
@@ -187,6 +191,7 @@ ns.Data["TOOLTIP_ROLE_KEYWORDS"] = {
 
             ["Weapon Merchant"] = true,
             ["Weaponsmith & Gunsmith"] = true,
+            ["Argent Quartermaster Lightspark"] = true,
 
             ["Bow Merchant"] = true,
             ["Bow & Arrow Merchant"] = true,

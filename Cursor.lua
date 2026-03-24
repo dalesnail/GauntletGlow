@@ -2,9 +2,14 @@ local ADDON_NAME, ns = ...
 local GG = ns.GauntletGlow
 
 local GetCursorPosition = GetCursorPosition
+local GetTime = GetTime
 local UIParent = UIParent
 local min = math.min
 local max = math.max
+local abs = math.abs
+local cos = math.cos
+local exp = math.exp
+local pi = math.pi
 
 local function SetTextureDesaturation(texture, enabled)
     if not texture then
@@ -18,12 +23,84 @@ local function SetTextureDesaturation(texture, enabled)
     end
 end
 
-function GG:RefreshGlowAppearance()
-    local glow = self.gauntletGlow
-    local tex = glow and glow.texture
+local function Clamp(value, lower, upper)
+    return min(upper, max(lower, value or 0))
+end
+
+local function MixColor(fromR, fromG, fromB, toR, toG, toB, amount)
+    return fromR + ((toR - fromR) * amount),
+        fromG + ((toG - fromG) * amount),
+        fromB + ((toB - fromB) * amount)
+end
+
+local function GetBreathingPulse(speed)
+    local clampedSpeed = Clamp(speed or 1, 0.45, 1.35)
+    local wave = 0.5 - (0.5 * cos(GetTime() * (clampedSpeed * pi * 2)))
+
+    return wave * wave * (3 - (2 * wave))
+end
+
+local function SmoothValue(currentValue, targetValue, speed, elapsed)
+    if currentValue == nil then
+        return targetValue
+    end
+
+    if elapsed <= 0 then
+        return currentValue
+    end
+
+    if abs(targetValue - currentValue) < 0.0005 then
+        return targetValue
+    end
+
+    local smoothing = 1 - exp(-max(speed or 0, 0.01) * elapsed)
+    return currentValue + ((targetValue - currentValue) * smoothing)
+end
+
+local function GetTransitionResponseSpeed(transitionSpeed)
+    local speed = Clamp(transitionSpeed or 4, 1, 12)
+    return 0.9 + (speed * 0.6)
+end
+
+local function EnsureEffectAnimationState(self)
+    if self.glowEffectState then
+        return self.glowEffectState
+    end
+
+    local neutral = (ns.PlayerStateEffects and ns.PlayerStateEffects.neutral) or {}
+    self.glowEffectState = {
+        current = {
+            colorR = neutral.colorR or 1,
+            colorG = neutral.colorG or 1,
+            colorB = neutral.colorB or 1,
+            tintStrength = neutral.tintStrength or 0,
+            brightness = neutral.brightness or 1,
+            alpha = neutral.alpha or 1,
+            desaturate = neutral.desaturate and true or false,
+            pulseSpeed = neutral.pulseSpeed or 1.5,
+            pulseStrength = neutral.pulseStrength or 0,
+        },
+        target = {
+            colorR = neutral.colorR or 1,
+            colorG = neutral.colorG or 1,
+            colorB = neutral.colorB or 1,
+            tintStrength = neutral.tintStrength or 0,
+            brightness = neutral.brightness or 1,
+            alpha = neutral.alpha or 1,
+            desaturate = neutral.desaturate and true or false,
+            pulseSpeed = neutral.pulseSpeed or 1.5,
+            pulseStrength = neutral.pulseStrength or 0,
+            transitionSpeed = neutral.transitionSpeed or 4,
+        },
+    }
+
+    return self.glowEffectState
+end
+
+local function GetBaseAppearance(self)
     local profile = self.db and self.db.profile
-    if not tex or not profile then
-        return
+    if not profile then
+        return 1, 1, 1, 1, false
     end
 
     local colorR, colorG, colorB = 1, 1, 1
@@ -38,14 +115,150 @@ function GG:RefreshGlowAppearance()
     local brightness = profile.useBrightness and (profile.brightness or 1) or 1
     local alpha = profile.useGlobalAlpha and (profile.globalAlpha or 1) or 1
 
-    colorR = min(1, max(0, colorR * brightness))
-    colorG = min(1, max(0, colorG * brightness))
-    colorB = min(1, max(0, colorB * brightness))
-    alpha = min(1, max(0, alpha))
+    colorR = Clamp(colorR * brightness, 0, 1)
+    colorG = Clamp(colorG * brightness, 0, 1)
+    colorB = Clamp(colorB * brightness, 0, 1)
+    alpha = Clamp(alpha, 0, 1)
 
-    tex:SetVertexColor(colorR, colorG, colorB)
-    tex:SetAlpha(alpha)
-    SetTextureDesaturation(tex, desaturate)
+    return colorR, colorG, colorB, alpha, desaturate
+end
+
+local function GetNeutralEffectValues()
+    local neutral = (ns.PlayerStateEffects and ns.PlayerStateEffects.neutral) or {}
+    return {
+        colorR = neutral.colorR or 1,
+        colorG = neutral.colorG or 1,
+        colorB = neutral.colorB or 1,
+        tintStrength = neutral.tintStrength or 0,
+        brightness = neutral.brightness or 1,
+        alpha = neutral.alpha or 1,
+        desaturate = neutral.desaturate and true or false,
+        pulseSpeed = neutral.pulseSpeed or 1.5,
+        pulseStrength = neutral.pulseStrength or 0,
+        transitionSpeed = neutral.transitionSpeed or 4,
+    }
+end
+
+local function GetTargetEffectValues(self, effectKey)
+    local values = GetNeutralEffectValues()
+    local previewActive = self.IsPlayerStateEffectPreviewActive and self:IsPlayerStateEffectPreviewActive(effectKey)
+    if not effectKey or (not previewActive and not self:IsPlayerStateEffectEnabled(effectKey)) then
+        return values
+    end
+
+    values.colorR = self:GetPlayerStateEffectValue(effectKey, "colorR") or values.colorR
+    values.colorG = self:GetPlayerStateEffectValue(effectKey, "colorG") or values.colorG
+    values.colorB = self:GetPlayerStateEffectValue(effectKey, "colorB") or values.colorB
+    values.tintStrength = self:GetPlayerStateEffectValue(effectKey, "tintStrength") or values.tintStrength
+    values.brightness = self:GetPlayerStateEffectValue(effectKey, "brightness") or values.brightness
+    values.alpha = self:GetPlayerStateEffectValue(effectKey, "alpha") or values.alpha
+    values.desaturate = self:GetPlayerStateEffectValue(effectKey, "desaturate") and true or false
+    values.transitionSpeed = self:GetPlayerStateEffectValue(effectKey, "transitionSpeed") or values.transitionSpeed
+
+    local pulseEnabled = self:GetPlayerStateEffectValue(effectKey, "pulseEnabled")
+    if pulseEnabled then
+        values.pulseSpeed = self:GetPlayerStateEffectValue(effectKey, "pulseSpeed") or values.pulseSpeed
+        values.pulseStrength = self:GetPlayerStateEffectValue(effectKey, "pulseStrength") or values.pulseStrength
+    else
+        values.pulseStrength = 0
+    end
+
+    return values
+end
+
+local function GetEffectComposite(self)
+    local baseR, baseG, baseB, baseAlpha, baseDesaturate = GetBaseAppearance(self)
+    local effectState = EnsureEffectAnimationState(self).current
+    local tintStrength = Clamp(effectState.tintStrength or 0, 0, 1)
+    local brightness = Clamp(effectState.brightness or 1, 0.5, 2.0)
+    local effectAlpha = Clamp(effectState.alpha or 1, 0.05, 1)
+    local pulseStrength = Clamp(effectState.pulseStrength or 0, 0, 1)
+    local pulseBoost = 0
+
+    if pulseStrength > 0 then
+        pulseBoost = GetBreathingPulse(effectState.pulseSpeed) * pulseStrength * 0.8
+    end
+
+    local finalR, finalG, finalB = MixColor(
+        baseR,
+        baseG,
+        baseB,
+        effectState.colorR or 1,
+        effectState.colorG or 1,
+        effectState.colorB or 1,
+        tintStrength
+    )
+
+    local intensity = Clamp(brightness + pulseBoost, 0.35, 2.2)
+    local baseIntensity = Clamp(intensity, 0, 1)
+    local overlayAlpha = Clamp((intensity - 1) * 0.95, 0, 1)
+    local overlayScale = 0.92 + (overlayAlpha * 0.22) + (pulseBoost * 0.12)
+    local finalAlpha = Clamp(baseAlpha * effectAlpha, 0, 1)
+
+    return {
+        colorR = finalR,
+        colorG = finalG,
+        colorB = finalB,
+        baseIntensity = baseIntensity,
+        overlayAlpha = overlayAlpha * finalAlpha,
+        overlayScale = overlayScale,
+        alpha = finalAlpha,
+        desaturate = baseDesaturate or (effectState.desaturate and true or false),
+    }
+end
+
+function GG:RefreshPlayerStateEffectTarget()
+    local effectState = EnsureEffectAnimationState(self)
+    local targetValues = GetTargetEffectValues(self, self.currentPlayerStateEffectKey)
+
+    effectState.target.colorR = targetValues.colorR
+    effectState.target.colorG = targetValues.colorG
+    effectState.target.colorB = targetValues.colorB
+    effectState.target.tintStrength = targetValues.tintStrength
+    effectState.target.brightness = targetValues.brightness
+    effectState.target.alpha = targetValues.alpha
+    effectState.target.desaturate = targetValues.desaturate and true or false
+    effectState.target.pulseSpeed = targetValues.pulseSpeed
+    effectState.target.pulseStrength = targetValues.pulseStrength
+    effectState.target.transitionSpeed = targetValues.transitionSpeed
+
+    self:RefreshGlowAppearance()
+end
+
+function GG:RefreshGlowAppearance()
+    local glow = self.gauntletGlow
+    local tex = glow and glow.texture
+    local effectTex = glow and glow.effectTexture
+    if not tex then
+        return
+    end
+
+    local composite = GetEffectComposite(self)
+
+    tex:SetVertexColor(
+        Clamp(composite.colorR * composite.baseIntensity, 0, 1),
+        Clamp(composite.colorG * composite.baseIntensity, 0, 1),
+        Clamp(composite.colorB * composite.baseIntensity, 0, 1)
+    )
+    tex:SetAlpha(composite.alpha)
+    SetTextureDesaturation(tex, composite.desaturate)
+
+    if effectTex then
+        if composite.overlayAlpha > 0.001 then
+            effectTex:SetVertexColor(
+                Clamp(composite.colorR * composite.overlayScale, 0, 1),
+                Clamp(composite.colorG * composite.overlayScale, 0, 1),
+                Clamp(composite.colorB * composite.overlayScale, 0, 1)
+            )
+            effectTex:SetAlpha(composite.overlayAlpha)
+            effectTex:Show()
+        else
+            effectTex:SetAlpha(0)
+            effectTex:Hide()
+        end
+
+        SetTextureDesaturation(effectTex, composite.desaturate)
+    end
 end
 
 function GG:CreateGauntletGlow()
@@ -56,10 +269,18 @@ function GG:CreateGauntletGlow()
     tex:SetAllPoints()
     tex:SetBlendMode("ADD")
 
+    local effectTex = f:CreateTexture(nil, "OVERLAY", nil, 1)
+    effectTex:SetAllPoints()
+    effectTex:SetBlendMode("ADD")
+    effectTex:SetAlpha(0)
+    effectTex:Hide()
+
     f.texture = tex
+    f.effectTexture = effectTex
     f:Hide()
 
     self.gauntletGlow = f
+    EnsureEffectAnimationState(self)
     self:RefreshGlowAppearance()
 end
 
@@ -71,6 +292,9 @@ function GG:ApplyState(stateName, force)
     if not state then return end
 
     self.gauntletGlow.texture:SetTexture(state.texture)
+    if self.gauntletGlow.effectTexture then
+        self.gauntletGlow.effectTexture:SetTexture(state.texture)
+    end
     self:RefreshGlowAppearance()
 
     local sizeX = state.sizeX
@@ -156,7 +380,7 @@ function GG:ApplyState(stateName, force)
         offsetX = self.db.profile.mailboxOffsetX or offsetX
         offsetY = self.db.profile.mailboxOffsetY or offsetY
 
-    elseif stateName == "BANKER" then
+    elseif stateName == "FINANCE" then
         sizeX = self.db.profile.bankerSizeX or sizeX
         sizeY = self.db.profile.bankerSizeY or sizeY
         offsetX = self.db.profile.bankerOffsetX or offsetX
@@ -208,8 +432,9 @@ function GG:StartCursorMovement()
 
     local f = CreateFrame("Frame")
 
-    f:SetScript("OnUpdate", function()
+    f:SetScript("OnUpdate", function(_, elapsed)
         self:UpdateCursorPosition()
+        self:UpdateGlowEffectAnimation(elapsed or 0)
     end)
 
     self.movementFrame = f
@@ -227,4 +452,23 @@ function GG:UpdateCursorPosition()
 
     self.gauntletGlow:ClearAllPoints()
     self.gauntletGlow:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x + offsetX, y + offsetY)
+end
+
+function GG:UpdateGlowEffectAnimation(elapsed)
+    local effectState = EnsureEffectAnimationState(self)
+    local current = effectState.current
+    local target = effectState.target
+    local transitionSpeed = GetTransitionResponseSpeed(target.transitionSpeed)
+
+    current.colorR = SmoothValue(current.colorR, target.colorR, transitionSpeed, elapsed)
+    current.colorG = SmoothValue(current.colorG, target.colorG, transitionSpeed, elapsed)
+    current.colorB = SmoothValue(current.colorB, target.colorB, transitionSpeed, elapsed)
+    current.tintStrength = SmoothValue(current.tintStrength, target.tintStrength, transitionSpeed, elapsed)
+    current.brightness = SmoothValue(current.brightness, target.brightness, transitionSpeed, elapsed)
+    current.alpha = SmoothValue(current.alpha, target.alpha, transitionSpeed, elapsed)
+    current.desaturate = target.desaturate and true or false
+    current.pulseSpeed = SmoothValue(current.pulseSpeed, target.pulseSpeed, transitionSpeed, elapsed)
+    current.pulseStrength = SmoothValue(current.pulseStrength, target.pulseStrength, transitionSpeed, elapsed)
+
+    self:RefreshGlowAppearance()
 end

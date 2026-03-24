@@ -45,7 +45,7 @@ ns.States = {
 
     MAILBOX = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\mail_glow.png", "MAILBOX"),
 
-    BANKER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "BANKER"),
+    FINANCE = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "FINANCE"),
 
     SKINNABLE = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\skinnable_glow.png", "SKINNABLE"),
 
@@ -72,7 +72,7 @@ ns.StatePriority = {
     INNKEEPER = 84,
     STABLEMASTER = 83,
     MAILBOX = 82,
-    BANKER = 81.75,
+    FINANCE = 81.75,
     VENDOR = 81,
     REPAIR_VENDOR = 81.5,
     AUTOLOOT = 85,

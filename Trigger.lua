@@ -14,12 +14,17 @@ local UnitIsPlayer = UnitIsPlayer
 local UnitIsFriend = UnitIsFriend
 local UnitGUID = UnitGUID
 local UnitClass = UnitClass
+local UnitHealth = UnitHealth
+local UnitHealthMax = UnitHealthMax
+local UnitAffectingCombat = UnitAffectingCombat
 local IsMouseButtonDown = IsMouseButtonDown
 local GetCVar = GetCVar
 local IsModifiedClick = IsModifiedClick
 local GetTime = GetTime
 local GetProfessions = GetProfessions
 local GetProfessionInfo = GetProfessionInfo
+local IsMounted = IsMounted
+local IsResting = IsResting
 
 local Tooltip = ns.Tooltip
 local Data = ns.Data
@@ -130,6 +135,22 @@ local function MerchantIsOpen()
     return MerchantFrame and MerchantFrame:IsShown()
 end
 
+local function MerchantBuybackTabIsSelected()
+    if not MerchantIsOpen() then
+        return false
+    end
+
+    if MerchantFrame and MerchantFrame.selectedTab ~= nil then
+        return MerchantFrame.selectedTab == 2
+    end
+
+    if type(PanelTemplates_GetSelectedTab) == "function" then
+        return PanelTemplates_GetSelectedTab(MerchantFrame) == 2
+    end
+
+    return false
+end
+
 local function GetHoveredFrame()
     if type(GetMouseFoci) ~= "function" then
         return nil
@@ -238,7 +259,7 @@ local function BagSlotHasItem(bag, slot)
 end
 
 local function GetHoveredBagItem()
-    if not MerchantIsOpen() then
+    if not MerchantIsOpen() or MerchantBuybackTabIsSelected() then
         return nil
     end
 
@@ -298,8 +319,8 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
         table.insert(candidates, "MAILBOX")
     end
 
-    if HasTooltipRole(lines, "BANKER") then
-        table.insert(candidates, "BANKER")
+    if HasTooltipRole(lines, "FINANCE") then
+        table.insert(candidates, "FINANCE")
     end
 
     if HasTooltipRole(lines, "SKINNABLE") and PlayerHasSkinning() then
@@ -325,6 +346,45 @@ local function AddWorldTooltipCandidates(candidates, lines)
     end
 end
 
+local function GetLowHealthThreshold()
+    local threshold = (ns.PlayerStateEffects and ns.PlayerStateEffects.lowHealthThreshold) or 0.35
+    return math.max(0, math.min(1, threshold))
+end
+
+local function IsPlayerLowHealth()
+    local maxHealth = UnitHealthMax and UnitHealthMax("player")
+    if not maxHealth or maxHealth <= 0 then
+        return false
+    end
+
+    local currentHealth = UnitHealth and UnitHealth("player") or 0
+    return (currentHealth / maxHealth) <= GetLowHealthThreshold()
+end
+
+local function IsPlayerInCombat()
+    return type(UnitAffectingCombat) == "function" and UnitAffectingCombat("player") and true or false
+end
+
+local function IsPlayerMountedState()
+    return type(IsMounted) == "function" and IsMounted() and true or false
+end
+
+local function IsPlayerRestingState()
+    return type(IsResting) == "function" and IsResting() and true or false
+end
+
+local function GetPlayerStateEffectPriority(effectKey)
+    local effectPriority = ns.PlayerStateEffects and ns.PlayerStateEffects.priority
+    return (effectPriority and effectPriority[effectKey]) or 0
+end
+
+local PLAYER_STATE_EFFECT_CHECKS = {
+    LOW_HEALTH = IsPlayerLowHealth,
+    COMBAT = IsPlayerInCombat,
+    MOUNTED = IsPlayerMountedState,
+    RESTING = IsPlayerRestingState,
+}
+
 -- ############################################################
 -- TRIGGER LOOP
 -- ############################################################
@@ -336,6 +396,7 @@ function GG:StartTriggerLoop()
 
     f:SetScript("OnUpdate", function()
         local visible, state = self:EvaluateTrigger()
+        self:UpdatePlayerStateEffect()
 
         self:ApplyVisibility(visible)
 
@@ -365,6 +426,51 @@ function GG:ResolveState(candidates)
     end
 
     return bestState
+end
+
+function GG:ResolvePlayerStateEffect()
+    local effectData = ns.PlayerStateEffects
+    local effectOrder = effectData and effectData.order
+    if not effectOrder then
+        return nil
+    end
+
+    local previewEffectKey = self.GetPlayerStateEffectPreviewKey and self:GetPlayerStateEffectPreviewKey()
+    if previewEffectKey then
+        return previewEffectKey
+    end
+
+    local bestEffect = nil
+    local bestPriority = -math.huge
+
+    for _, effectKey in ipairs(effectOrder) do
+        local check = PLAYER_STATE_EFFECT_CHECKS[effectKey]
+        if check and self:IsPlayerStateEffectEnabled(effectKey) and check() then
+            local priority = GetPlayerStateEffectPriority(effectKey)
+            if priority > bestPriority then
+                bestPriority = priority
+                bestEffect = effectKey
+            end
+        end
+    end
+
+    return bestEffect
+end
+
+function GG:SetPlayerStateEffect(effectKey)
+    if self.currentPlayerStateEffectKey == effectKey then
+        return
+    end
+
+    self.currentPlayerStateEffectKey = effectKey
+
+    if self.RefreshPlayerStateEffectTarget then
+        self:RefreshPlayerStateEffectTarget()
+    end
+end
+
+function GG:UpdatePlayerStateEffect()
+    self:SetPlayerStateEffect(self:ResolvePlayerStateEffect())
 end
 
 -- ############################################################
