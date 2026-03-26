@@ -1,0 +1,9 @@
+## Interface: 20504
+## Title: GLiB
+## Notes: Lightweight entity classification library
+## Author: Dalesnail
+## Version: 0.1.0
+## X-Category: Library
+
+Core.lua
+Objects.lua
