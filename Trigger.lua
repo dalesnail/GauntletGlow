@@ -10,8 +10,6 @@ local UnitIsUnit = UnitIsUnit
 local UnitCanAttack = UnitCanAttack
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsTapDenied = UnitIsTapDenied
-local UnitIsPlayer = UnitIsPlayer
-local UnitIsFriend = UnitIsFriend
 local UnitGUID = UnitGUID
 local UnitClass = UnitClass
 local UnitHealth = UnitHealth
@@ -25,9 +23,16 @@ local GetProfessions = GetProfessions
 local GetProfessionInfo = GetProfessionInfo
 local IsMounted = IsMounted
 local IsResting = IsResting
+local CanMerchantRepair = CanMerchantRepair
+local strtrim = strtrim
+local strsplit = strsplit
+local tonumber = tonumber
+local ipairs = ipairs
+local type = type
+local math = math
+local table = table
 
 local Tooltip = ns.Tooltip
-local Data = ns.Data
 local QuestieIntegration = ns.QuestieIntegration
 
 -- ############################################################
@@ -38,36 +43,22 @@ local function GetGLiB()
     return _G.GLiB
 end
 
-local function HasTooltipKeywords(dataKey, lines, category)
-    local keywordData = Data and Data[dataKey]
-    local categoryData = keywordData and keywordData[category]
-    if not categoryData or not lines then
+local function HasTooltipNpcTag(lines, tag)
+    local glib = GetGLiB()
+    if not glib or type(glib.TooltipNpcHasTag) ~= "function" then
         return false
     end
 
-    for _, line in ipairs(lines) do
-        if categoryData.exact and categoryData.exact[line] then
-            return true
-        end
+    return glib:TooltipNpcHasTag(lines, tag)
+end
 
-        if categoryData.contains then
-            for _, keyword in ipairs(categoryData.contains) do
-                if strfind(line, keyword, 1, true) then
-                    return true
-                end
-            end
-        end
+local function HasTooltipWorldTag(lines, tag)
+    local glib = GetGLiB()
+    if not glib or type(glib.TooltipWorldHasTag) ~= "function" then
+        return false
     end
 
-    return false
-end
-
-local function HasTooltipRole(lines, category)
-    return HasTooltipKeywords("TOOLTIP_ROLE_KEYWORDS", lines, category)
-end
-
-local function HasWorldTooltipKeyword(lines, category)
-    return HasTooltipKeywords("TOOLTIP_WORLD_KEYWORDS", lines, category)
+    return glib:TooltipWorldHasTag(lines, tag)
 end
 
 local function GetNpcIdFromGUID(guid)
@@ -91,18 +82,13 @@ local function GetMouseoverNpcId()
     return GetNpcIdFromGUID(UnitGUID("mouseover"))
 end
 
-local function GetGLiBNpcType()
+local function GetGLiBNpcTypeById(npcId)
     local glib = GetGLiB()
-    if not glib or type(glib.NpcTypeById) ~= "function" then
+    if not glib or type(glib.NpcTypeById) ~= "function" or not npcId then
         return nil
     end
 
-    local npcId = GetMouseoverNpcId()
-    if not npcId then
-        return nil
-    end
-
-    return glib:NpcTypeById(npcId), npcId
+    return glib:NpcTypeById(npcId)
 end
 
 local function GetGLiBObjType(name)
@@ -118,18 +104,80 @@ local function GetGLiBObjType(name)
     return glib:ObjType(name)
 end
 
-local function GetGLiBIdentity(name)
-    local npcType, npcId = GetGLiBNpcType()
-    if npcType then
-        return "npc", npcType, npcId
+local function GetLearnedNpcCache()
+    if not GG or type(GG.NormalizeLearnedNpcCache) ~= "function" then
+        return nil
     end
 
-    local objectType = GetGLiBObjType(name)
-    if objectType then
-        return "object", objectType
+    return GG:NormalizeLearnedNpcCache()
+end
+
+local function IsLearnedNpcTag(npcId, tag)
+    if type(npcId) ~= "number" or type(tag) ~= "string" or tag == "" then
+        return false
     end
 
-    return nil, nil, nil
+    local cache = GetLearnedNpcCache()
+    local bucket = cache and cache[tag]
+    return bucket and bucket[npcId] == true or false
+end
+
+local function IsShippedNpcTag(npcId, tag)
+    local glib = GetGLiB()
+    if not glib or type(glib.HasNpcTagById) ~= "function" then
+        return false
+    end
+
+    return glib:HasNpcTagById(npcId, tag)
+end
+
+local function IsKnownRepairNpc(npcId)
+    return IsShippedNpcTag(npcId, "repair_vendor") or IsLearnedNpcTag(npcId, "repair_vendor")
+end
+
+local function IsKnownVendorNpc(npcId)
+    if IsKnownRepairNpc(npcId) then
+        return true
+    end
+
+    return IsShippedNpcTag(npcId, "vendor") or IsLearnedNpcTag(npcId, "vendor")
+end
+
+local function GetMerchantNpcId()
+    local guid =
+        UnitGUID("npc")
+        or UnitGUID("mouseover")
+        or UnitGUID("target")
+        or (GG and GG.lastMouseoverGUID)
+
+    return GetNpcIdFromGUID(guid)
+end
+
+local function LearnMerchantNpc()
+    local npcId = GetMerchantNpcId()
+    if not npcId then
+        return
+    end
+
+    local cache = GetLearnedNpcCache()
+    if not cache then
+        return
+    end
+
+    local canRepair = type(CanMerchantRepair) == "function" and CanMerchantRepair() or false
+
+    if canRepair then
+        if not IsShippedNpcTag(npcId, "repair_vendor") then
+            cache.repair_vendor[npcId] = true
+        end
+
+        cache.vendor[npcId] = nil
+        return
+    end
+
+    if not IsShippedNpcTag(npcId, "vendor") and not IsShippedNpcTag(npcId, "repair_vendor") then
+        cache.vendor[npcId] = true
+    end
 end
 
 local function NormalizeBagID(bag)
@@ -148,7 +196,10 @@ local function PlayerHasSkinning()
     local prof1, prof2 = GetProfessions()
 
     local function IsSkinning(index)
-        if not index then return false end
+        if not index then
+            return false
+        end
+
         local name = GetProfessionInfo(index)
         return name == "Skinning"
     end
@@ -314,8 +365,27 @@ end
 
 local function AddTooltipRoleCandidates(candidates, lines, name)
     local glib = GetGLiB()
-    local _, glibType, npcId = GetGLiBIdentity(name)
+    local npcId = GetMouseoverNpcId()
+    local hasLiveNpc = npcId ~= nil
+
+    local npcType = GetGLiBNpcTypeById(npcId)
+    local objectType = nil
+
+    if not npcType and name then
+        objectType = GetGLiBObjType(name)
+    end
+
+    local glibType = npcType or objectType
     local glibInfo = npcId and glib and type(glib.NpcById) == "function" and glib:NpcById(npcId) or nil
+
+    local knownRepair = npcId and IsKnownRepairNpc(npcId) or false
+    local knownVendor = npcId and IsKnownVendorNpc(npcId) or false
+
+    if knownRepair then
+        table.insert(candidates, "REPAIR_VENDOR")
+    elseif knownVendor then
+        table.insert(candidates, "VENDOR")
+    end
 
     if glibType == "flightmaster" then
         table.insert(candidates, "FLIGHTMASTER")
@@ -359,25 +429,25 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
         table.insert(candidates, "FINANCE")
     end
 
-    if HasTooltipRole(lines, "SKINNABLE") and PlayerHasSkinning() then
+    if HasTooltipNpcTag(lines, "skinnable") and PlayerHasSkinning() then
         table.insert(candidates, "SKINNABLE")
     end
 
-    if HasTooltipRole(lines, "REPAIR_VENDOR") then
+    if hasLiveNpc and not knownRepair and HasTooltipNpcTag(lines, "repair_vendor") then
         table.insert(candidates, "REPAIR_VENDOR")
     end
 
-    if HasTooltipRole(lines, "VENDOR") then
+    if hasLiveNpc and not knownVendor and not knownRepair and HasTooltipNpcTag(lines, "vendor") then
         table.insert(candidates, "VENDOR")
     end
 end
 
 local function AddWorldTooltipCandidates(candidates, lines)
-    if HasWorldTooltipKeyword(lines, "HERBALISM") then
+    if HasTooltipWorldTag(lines, "herbalism") then
         table.insert(candidates, "HERBALISM")
     end
 
-    if HasWorldTooltipKeyword(lines, "MINING") then
+    if HasTooltipWorldTag(lines, "mining") then
         table.insert(candidates, "MINING")
     end
 end
@@ -393,30 +463,35 @@ local function IsPlayerLowHealth()
         return false
     end
 
-    local currentHealth = UnitHealth and UnitHealth("player") or 0
+    local currentHealth = UnitHealth and UnitHealth("player")
+    if not currentHealth then
+        return false
+    end
+
     return (currentHealth / maxHealth) <= GetLowHealthThreshold()
 end
 
-local function IsPlayerInCombat()
-    return type(UnitAffectingCombat) == "function" and UnitAffectingCombat("player") and true or false
+local function IsPlayerCombatState()
+    return UnitAffectingCombat and UnitAffectingCombat("player") and true or false
 end
 
 local function IsPlayerMountedState()
-    return type(IsMounted) == "function" and IsMounted() and true or false
+    return IsMounted and IsMounted() and true or false
 end
 
 local function IsPlayerRestingState()
-    return type(IsResting) == "function" and IsResting() and true or false
+    return IsResting and IsResting() and true or false
 end
 
 local function GetPlayerStateEffectPriority(effectKey)
-    local effectPriority = ns.PlayerStateEffects and ns.PlayerStateEffects.priority
-    return (effectPriority and effectPriority[effectKey]) or 0
+    local effectData = ns.PlayerStateEffects
+    local priorityMap = effectData and effectData.priority
+    return priorityMap and priorityMap[effectKey] or 0
 end
 
 local PLAYER_STATE_EFFECT_CHECKS = {
     LOW_HEALTH = IsPlayerLowHealth,
-    COMBAT = IsPlayerInCombat,
+    COMBAT = IsPlayerCombatState,
     MOUNTED = IsPlayerMountedState,
     RESTING = IsPlayerRestingState,
 }
@@ -426,7 +501,9 @@ local PLAYER_STATE_EFFECT_CHECKS = {
 -- ############################################################
 
 function GG:StartTriggerLoop()
-    if self.triggerFrame then return end
+    if self.triggerFrame then
+        return
+    end
 
     local f = CreateFrame("Frame")
 
@@ -518,8 +595,7 @@ function GG:EvaluateTrigger()
         return true, "DEFAULT"
     end
 
-    if IsMouseButtonDown("RightButton")
-        or IsMouseButtonDown("LeftButton") then
+    if IsMouseButtonDown("RightButton") or IsMouseButtonDown("LeftButton") then
         return false
     end
 
@@ -547,7 +623,7 @@ function GG:EvaluateTrigger()
     if UnitExists("mouseover") and not UnitIsUnit("mouseover", "player") then
         local guid = UnitGUID("mouseover")
 
-        if guid and UnitIsDeadOrGhost("mouseover") then
+        if guid then
             self.lastMouseoverGUID = guid
         end
 
@@ -569,10 +645,7 @@ function GG:EvaluateTrigger()
             end
         end
 
-        if UnitExists("mouseover")
-            and not UnitIsDeadOrGhost("mouseover")
-            and UnitCanAttack("player", "mouseover") then
-
+        if UnitExists("mouseover") and not UnitIsDeadOrGhost("mouseover") and UnitCanAttack("player", "mouseover") then
             table.insert(candidates, "ATTACK")
         end
     end
@@ -580,6 +653,10 @@ function GG:EvaluateTrigger()
     local best = self:ResolveState(candidates)
 
     return true, best or "DEFAULT"
+end
+
+function GG:MERCHANT_SHOW()
+    LearnMerchantNpc()
 end
 
 -- ############################################################
@@ -592,7 +669,10 @@ function GG:ApplyVisibility(state)
         return
     end
 
-    if self.currentVisible == state then return end
+    if self.currentVisible == state then
+        return
+    end
+
     self.currentVisible = state
 
     if state then

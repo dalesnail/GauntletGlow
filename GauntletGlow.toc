@@ -24,20 +24,13 @@ Libs\Ace3\AceDB-3.0\AceDB-3.0.xml
 Libs\GLiB\Core.lua
 Libs\GLiB\Objects.lua
 Libs\GLiB\NPCs.lua
+Libs\GLiB\Tooltip.lua
 
 # --------------------------------------------------
 # CORE
 # --------------------------------------------------
 Core.lua
 States.lua
-
-# --------------------------------------------------
-# DATA SYSTEM
-# --------------------------------------------------
-Data\Core.lua
-Data\World\TooltipWorld.lua
-Data\NPCs\TooltipRoles.lua
-Data\NPCs\FlightMasters.lua
 
 # --------------------------------------------------
 # MODULES

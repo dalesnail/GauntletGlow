@@ -12,6 +12,9 @@ GLiB._p = P
 
 local strtrim = strtrim
 local lower = string.lower
+local strfind = string.find
+local ipairs = ipairs
+local type = type
 
 local function norm(value)
     if type(value) ~= "string" then
@@ -107,4 +110,55 @@ function GLiB:HasNpcTagById(npcId, tag)
     end
 
     return info.tags[tag] == true
+end
+
+--[[ Tooltip fallback data ]]--
+local function tooltipLinesMatch(lines, categoryData)
+    if type(lines) ~= "table" or not categoryData then
+        return false
+    end
+
+    for _, line in ipairs(lines) do
+        if type(line) == "string" and line ~= "" then
+            if categoryData.exact and categoryData.exact[line] then
+                return true
+            end
+
+            if categoryData.contains then
+                for _, keyword in ipairs(categoryData.contains) do
+                    if strfind(line, keyword, 1, true) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+function GLiB:TooltipNpcHasTag(lines, tag)
+    if type(tag) ~= "string" or tag == "" then
+        return false
+    end
+
+    local dataMap = P.tooltipNpcTags
+    if not dataMap then
+        return false
+    end
+
+    return tooltipLinesMatch(lines, dataMap[tag])
+end
+
+function GLiB:TooltipWorldHasTag(lines, tag)
+    if type(tag) ~= "string" or tag == "" then
+        return false
+    end
+
+    local dataMap = P.tooltipWorldTags
+    if not dataMap then
+        return false
+    end
+
+    return tooltipLinesMatch(lines, dataMap[tag])
 end

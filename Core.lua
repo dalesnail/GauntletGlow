@@ -1,9 +1,4 @@
--- ############################################################
--- CORE: Addon Initialization
--- ############################################################
-
 local ADDON_NAME, ns = ...
-local GG = ns.GauntletGlow
 
 ns.CursorStateDefaults = ns.CursorStateDefaults or {
     DEFAULT = {
@@ -440,7 +435,13 @@ function GG:OnInitialize()
     _G.GauntletGlowNS = ns
 
     self.db = LibStub("AceDB-3.0"):New("GauntletGlowDB", {
-        profile = CreateProfileDefaults()
+        profile = CreateProfileDefaults(),
+        global = {
+            learnedNpcTags = {
+                vendor = {},
+                repair_vendor = {},
+            },
+        },
     })
 
     self:MigratePlayerStateEffects()
@@ -462,6 +463,7 @@ function GG:OnEnable()
     self:RegisterChatCommand("gauntletglow", "OpenConfig")
 
     self:RegisterEvent("LOOT_OPENED")
+    self:RegisterEvent("MERCHANT_SHOW")
 
     self.cleanupTimer = self:ScheduleRepeatingTimer("CleanupLootedUnits", CLEANUP_INTERVAL)
 end
@@ -480,6 +482,19 @@ function GG:CleanupLootedUnits()
             self.lootedUnits[guid] = nil
         end
     end
+end
+
+function GG:NormalizeLearnedNpcCache()
+    local global = self.db and self.db.global
+    if not global then
+        return nil
+    end
+
+    global.learnedNpcTags = global.learnedNpcTags or {}
+    global.learnedNpcTags.vendor = global.learnedNpcTags.vendor or {}
+    global.learnedNpcTags.repair_vendor = global.learnedNpcTags.repair_vendor or {}
+
+    return global.learnedNpcTags
 end
 
 function GG:OnDisable()
