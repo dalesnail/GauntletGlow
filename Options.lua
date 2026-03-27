@@ -91,6 +91,7 @@ local CURSOR_STATE_ORDER = {
     "VENDOR",
     "SELL_ITEM",
     "REPAIR_VENDOR",
+    "REPAIR_HOVER",
 }
 
 local CURSOR_STATE_LABELS = {
@@ -103,6 +104,7 @@ local CURSOR_STATE_LABELS = {
     SPEAK = "Speak",
     SELL_ITEM = "Sell Item",
     REPAIR_VENDOR = "Repair Vendor",
+    REPAIR_HOVER = "Repair Hover",
 }
 
 local CURSOR_STATE_CONFIG = {
@@ -231,6 +233,12 @@ local CURSOR_STATE_CONFIG = {
         heightKey = "repairVendorSizeY",
         offsetXKey = "repairVendorOffsetX",
         offsetYKey = "repairVendorOffsetY",
+    },
+    REPAIR_HOVER = {
+        widthKey = "repairHoverSizeX",
+        heightKey = "repairHoverSizeY",
+        offsetXKey = "repairHoverOffsetX",
+        offsetYKey = "repairHoverOffsetY",
     },
 }
 

@@ -422,6 +422,12 @@ function GG:ApplyState(stateName, force)
         offsetX = self.db.profile.repairVendorOffsetX or offsetX
         offsetY = self.db.profile.repairVendorOffsetY or offsetY
 
+    elseif stateName == "REPAIR_HOVER" then
+        sizeX = self.db.profile.repairHoverSizeX or sizeX
+        sizeY = self.db.profile.repairHoverSizeY or sizeY
+        offsetX = self.db.profile.repairHoverOffsetX or offsetX
+        offsetY = self.db.profile.repairHoverOffsetY or offsetY
+
     elseif stateName == "SELL_ITEM" then
         sizeX = self.db.profile.sellItemSizeX or sizeX
         sizeY = self.db.profile.sellItemSizeY or sizeY

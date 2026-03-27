@@ -24,6 +24,7 @@ local GetProfessionInfo = GetProfessionInfo
 local IsMounted = IsMounted
 local IsResting = IsResting
 local CanMerchantRepair = CanMerchantRepair
+local InRepairMode = InRepairMode
 local strtrim = strtrim
 local strsplit = strsplit
 local tonumber = tonumber
@@ -363,6 +364,89 @@ local function GetHoveredBagItem()
     return bag, slot
 end
 
+local function IsRepairModeActive()
+    return MerchantIsOpen()
+        and not MerchantBuybackTabIsSelected()
+        and type(InRepairMode) == "function"
+        and InRepairMode()
+        and true or false
+end
+
+local function GetMerchantItemIndexFromFrame(frame)
+    while frame do
+        local name = frame.GetName and frame:GetName()
+
+        if name then
+            local index = name:match("^MerchantItem(%d+)ItemButton$")
+            if index then
+                return tonumber(index)
+            end
+
+            index = name:match("^MerchantItem(%d+)$")
+            if index then
+                return tonumber(index)
+            end
+        end
+
+        frame = frame.GetParent and frame:GetParent() or nil
+    end
+
+    return nil
+end
+
+local function MerchantItemIsPurchasable(index)
+    if type(index) ~= "number" then
+        return false
+    end
+
+    if type(GetMerchantItemInfo) == "function" then
+        local _, _, price, _, _, isUsable, extendedCost = GetMerchantItemInfo(index)
+        if price == nil and isUsable == nil and extendedCost == nil then
+            return false
+        end
+
+        if price and price > 0 then
+            return true
+        end
+
+        if extendedCost then
+            return true
+        end
+    end
+
+    if type(C_MerchantFrame) == "table" and type(C_MerchantFrame.GetItemInfo) == "function" then
+        local info = C_MerchantFrame.GetItemInfo(index)
+        if info and (info.price and info.price > 0 or info.hasExtendedCost) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function GetHoveredMerchantItemIndex()
+    if not MerchantIsOpen() or MerchantBuybackTabIsSelected() then
+        return nil
+    end
+
+    local hoveredFrame = GetHoveredFrame()
+    if not hoveredFrame then
+        return nil
+    end
+
+    local index = GetMerchantItemIndexFromFrame(hoveredFrame)
+    if not index then
+        return nil
+    end
+
+    if not MerchantItemIsPurchasable(index) then
+        return nil
+    end
+
+    return index
+end
+
+
 local function AddTooltipRoleCandidates(candidates, lines, name)
     local glib = GetGLiB()
     local npcId = GetMouseoverNpcId()
@@ -614,6 +698,14 @@ function GG:EvaluateTrigger()
     local questieState = QuestieIntegration and QuestieIntegration.GetMouseoverNpcQuestState and QuestieIntegration.GetMouseoverNpcQuestState()
     if questieState then
         table.insert(candidates, questieState)
+    end
+
+    if IsRepairModeActive() then
+        table.insert(candidates, "REPAIR_HOVER")
+    end
+
+    if GetHoveredMerchantItemIndex() then
+        table.insert(candidates, "LOOT")
     end
 
     if GetHoveredBagItem() then

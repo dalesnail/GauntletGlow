@@ -58,6 +58,8 @@ ns.States = {
     SELL_ITEM = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "SELL_ITEM"),
 
     REPAIR_VENDOR = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\repair_glow.png", "REPAIR_VENDOR"),
+
+    REPAIR_HOVER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\repair_hover.png", "REPAIR_HOVER"),
 }
 
 -- ############################################################
@@ -65,6 +67,7 @@ ns.States = {
 -- ############################################################
 
 ns.StatePriority = {
+    REPAIR_HOVER = 101,
     SELL_ITEM = 100,
     HERBALISM = 95,
     MINING = 95,

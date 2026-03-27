@@ -127,6 +127,12 @@ ns.CursorStateDefaults = ns.CursorStateDefaults or {
         offsetX = 14.5,
         offsetY = -15,
     },
+    REPAIR_HOVER = {
+        sizeX = 69,
+        sizeY = 69,
+        offsetX = 15.5,
+        offsetY = -15.5,
+    },
 }
 
 ns.PlayerStateEffects = ns.PlayerStateEffects or {
@@ -348,6 +354,12 @@ local CURSOR_STATE_PROFILE_KEYS = {
         sizeY = "repairVendorSizeY",
         offsetX = "repairVendorOffsetX",
         offsetY = "repairVendorOffsetY",
+    },
+    REPAIR_HOVER = {
+        sizeX = "repairHoverSizeX",
+        sizeY = "repairHoverSizeY",
+        offsetX = "repairHoverOffsetX",
+        offsetY = "repairHoverOffsetY",
     },
 }
 
