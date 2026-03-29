@@ -2,11 +2,14 @@ local ADDON_NAME, ns = ...
 local GG = ns.GauntletGlow
 
 local cursorStateDefaults = ns.CursorStateDefaults or {}
+local mediaRegistry = assert(ns.MediaRegistry, "GauntletGlow media registry is not loaded")
 
-local function CreateState(texture, stateKey)
+local function CreateState(stateKey)
     local defaults = cursorStateDefaults[stateKey] or cursorStateDefaults.DEFAULT or {}
+    local texture = assert(mediaRegistry:GetTexturePath(stateKey), "GauntletGlow missing media texture for state " .. tostring(stateKey))
 
     return {
+        mediaKey = mediaRegistry:GetGroupKeyForState(stateKey),
         texture = texture,
         sizeX = defaults.sizeX,
         sizeY = defaults.sizeY,
@@ -17,49 +20,51 @@ end
 
 ns.States = {
 
-    DEFAULT = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\cursor_glow_default.png", "DEFAULT"),
+    DEFAULT = CreateState("DEFAULT"),
 
-    ATTACK = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\sword_glow_default.png", "ATTACK"),
+    ATTACK = CreateState("ATTACK"),
 
-    LOOT = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "LOOT"),
+    LOOT = CreateState("LOOT"),
 
-    AUTOLOOT = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\autoloot_glow.png", "AUTOLOOT"),
+    AUTOLOOT = CreateState("AUTOLOOT"),
 
-    HERBALISM = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\herb_glow.png", "HERBALISM"),
+    HERBALISM = CreateState("HERBALISM"),
 
-    MINING = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\mining_glow.png", "MINING"),
+    MINING = CreateState("MINING"),
 
-    FLIGHTMASTER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\flight_glow.png", "FLIGHTMASTER"),
+    FLIGHTMASTER = CreateState("FLIGHTMASTER"),
 
-    BATTLEMASTER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\battlemaster_glow.png", "BATTLEMASTER"),
+    BATTLEMASTER = CreateState("BATTLEMASTER"),
 
-    TRAINER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\trainer_glow.png", "TRAINER"),
+    TRAINER = CreateState("TRAINER"),
 
-    SPEAK = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\speak_glow.png", "SPEAK"),
+    SPEAK = CreateState("SPEAK"),
 
-    DIRECTIONS_GUARD = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\directions_glow.png", "DIRECTIONS_GUARD"),
+    DIRECTIONS_GUARD = CreateState("DIRECTIONS_GUARD"),
 
-    INNKEEPER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\innkeeper_glow.png", "INNKEEPER"),
+    INNKEEPER = CreateState("INNKEEPER"),
 
-    STABLEMASTER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\stablemaster_glow.png", "STABLEMASTER"),
+    STABLEMASTER = CreateState("STABLEMASTER"),
 
-    MAILBOX = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\mail_glow.png", "MAILBOX"),
+    MAILBOX = CreateState("MAILBOX"),
 
-    QUEST_AVAILABLE = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\quest_A.png", "QUEST_AVAILABLE"),
+    QUEST_AVAILABLE = CreateState("QUEST_AVAILABLE"),
 
-    QUEST_TURN_IN = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\quest_C.png", "QUEST_TURN_IN"),
+    QUEST_INCOMPLETE = CreateState("QUEST_INCOMPLETE"),
 
-    FINANCE = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "FINANCE"),
+    QUEST_TURN_IN = CreateState("QUEST_TURN_IN"),
 
-    SKINNABLE = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\skinnable_glow.png", "SKINNABLE"),
+    FINANCE = CreateState("FINANCE"),
 
-    VENDOR = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "VENDOR"),
+    SKINNABLE = CreateState("SKINNABLE"),
 
-    SELL_ITEM = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\loot_glow.png", "SELL_ITEM"),
+    VENDOR = CreateState("VENDOR"),
 
-    REPAIR_VENDOR = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\repair_glow.png", "REPAIR_VENDOR"),
+    SELL_ITEM = CreateState("SELL_ITEM"),
 
-    REPAIR_HOVER = CreateState("Interface\\AddOns\\GauntletGlow\\Media\\repair_hover.png", "REPAIR_HOVER"),
+    REPAIR_VENDOR = CreateState("REPAIR_VENDOR"),
+
+    REPAIR_HOVER = CreateState("REPAIR_HOVER"),
 }
 
 -- ############################################################
@@ -73,6 +78,7 @@ ns.StatePriority = {
     MINING = 95,
     QUEST_TURN_IN = 91,
     QUEST_AVAILABLE = 90.5,
+    QUEST_INCOMPLETE = 90.25,
     FLIGHTMASTER = 90,
     BATTLEMASTER = 88,
     REPAIR_VENDOR = 87.5,

@@ -1,5 +1,6 @@
 local ADDON_NAME, ns = ...
 local GG = ns.GauntletGlow
+local mediaRegistry = ns.MediaRegistry
 
 ------------------------------------------------------------------------------------
 -- WINDOW LAYOUT CONSTANTS
@@ -66,47 +67,8 @@ local PAGES = {
     { key = "about", title = "About" },
 }
 
+-- CURSOR ADJUSTMENT DATA
 ------------------------------------------------------------------------------------
--- CURSOR STATE DATA
-------------------------------------------------------------------------------------
-local CURSOR_STATE_ORDER = {
-    "DEFAULT",
-    "ATTACK",
-    "LOOT",
-    "AUTOLOOT",
-    "HERBALISM",
-    "MINING",
-    "FLIGHTMASTER",
-    "BATTLEMASTER",
-    "TRAINER",
-    "SPEAK",
-    "DIRECTIONS_GUARD",
-    "INNKEEPER",
-    "STABLEMASTER",
-    "MAILBOX",
-    "QUEST_AVAILABLE",
-    "QUEST_TURN_IN",
-    "FINANCE",
-    "SKINNABLE",
-    "VENDOR",
-    "SELL_ITEM",
-    "REPAIR_VENDOR",
-    "REPAIR_HOVER",
-}
-
-local CURSOR_STATE_LABELS = {
-    AUTOLOOT = "Auto Loot",
-    FLIGHTMASTER = "Flight Master",
-    STABLEMASTER = "Stable Master",
-    QUEST_AVAILABLE = "Quest Available",
-    QUEST_TURN_IN = "Quest Turn In",
-    FINANCE = "Finance",
-    SPEAK = "Speak",
-    SELL_ITEM = "Sell Item",
-    REPAIR_VENDOR = "Repair Vendor",
-    REPAIR_HOVER = "Repair Hover",
-}
-
 local CURSOR_STATE_CONFIG = {
     DEFAULT = {
         widthKey = "sizeX",
@@ -197,6 +159,12 @@ local CURSOR_STATE_CONFIG = {
         heightKey = "questAvailableSizeY",
         offsetXKey = "questAvailableOffsetX",
         offsetYKey = "questAvailableOffsetY",
+    },
+    QUEST_INCOMPLETE = {
+        widthKey = "questIncompleteSizeX",
+        heightKey = "questIncompleteSizeY",
+        offsetXKey = "questIncompleteOffsetX",
+        offsetYKey = "questIncompleteOffsetY",
     },
     QUEST_TURN_IN = {
         widthKey = "questTurnInSizeX",
@@ -408,6 +376,10 @@ end
 
 local function SetAddonEnabled(self, enabled)
     self.db.profile.enabled = enabled and true or false
+
+    if self.RefreshCursorTrail then
+        self:RefreshCursorTrail()
+    end
 
     if not enabled then
         self.currentVisible = nil
@@ -675,10 +647,6 @@ end
 -- CURSOR STATE LABEL / VALUE HELPERS
 ------------------------------------------------------------------------------------
 local function FormatCursorStateLabel(stateKey)
-    if CURSOR_STATE_LABELS[stateKey] then
-        return CURSOR_STATE_LABELS[stateKey]
-    end
-
     local words = { strsplit("_", stateKey or "") }
     for index, word in ipairs(words) do
         words[index] = word:sub(1, 1) .. word:sub(2):lower()
@@ -687,46 +655,68 @@ local function FormatCursorStateLabel(stateKey)
     return table.concat(words, " ")
 end
 
+local function GetCursorStateConfig(stateKey)
+    return CURSOR_STATE_CONFIG[stateKey]
+end
+
+local function GetCursorStateProfileKey(stateKey, controlId)
+    local config = GetCursorStateConfig(stateKey)
+    if not config then
+        return nil
+    end
+
+    return config[controlId .. "Key"]
+end
+
 local function GetCursorStateEntries()
     local entries = {}
-    local seen = {}
     local states = ns.States or {}
+    local registry = mediaRegistry
 
-    for _, stateKey in ipairs(CURSOR_STATE_ORDER) do
-        if states[stateKey] then
-            entries[#entries + 1] = {
-                key = stateKey,
-                label = FormatCursorStateLabel(stateKey),
-            }
-            seen[stateKey] = true
+    if registry and registry.order and registry.groups then
+        for _, groupKey in ipairs(registry.order) do
+            local group = registry.groups[groupKey]
+            if group and group.active and group.states and #group.states > 0 then
+                local availableStates = {}
+
+                for _, stateKey in ipairs(group.states) do
+                    if states[stateKey] and GetCursorStateConfig(stateKey) then
+                        availableStates[#availableStates + 1] = stateKey
+                    end
+                end
+
+                if #availableStates > 0 then
+                    entries[#entries + 1] = {
+                        key = groupKey,
+                        label = group.optionLabel or FormatCursorStateLabel(group.primaryState or availableStates[1]),
+                        states = availableStates,
+                        primaryState = group.primaryState or availableStates[1],
+                        sharedDefaultsState = group.sharedDefaultsState or group.primaryState or availableStates[1],
+                    }
+                end
+            end
         end
+
+        return entries
     end
 
     for stateKey in pairs(states) do
-        if not seen[stateKey] then
+        if GetCursorStateConfig(stateKey) then
             entries[#entries + 1] = {
                 key = stateKey,
                 label = FormatCursorStateLabel(stateKey),
+                states = { stateKey },
+                primaryState = stateKey,
+                sharedDefaultsState = stateKey,
             }
         end
     end
 
     table.sort(entries, function(left, right)
-        local leftLabel = strlower(left.label or "")
-        local rightLabel = strlower(right.label or "")
-
-        if leftLabel == rightLabel then
-            return (left.key or "") < (right.key or "")
-        end
-
-        return leftLabel < rightLabel
+        return (left.label or "") < (right.label or "")
     end)
 
     return entries
-end
-
-local function GetCursorStateConfig(stateKey)
-    return CURSOR_STATE_CONFIG[stateKey]
 end
 
 local function GetCursorStateDefaultValue(self, stateKey, controlId)
@@ -748,43 +738,82 @@ local function GetCursorStateDefaultValue(self, stateKey, controlId)
     return 0
 end
 
-local function GetCursorStateValue(self, stateKey, controlId)
-    local config = GetCursorStateConfig(stateKey)
-    if not config or not self or not self.db or not self.db.profile then
+local function GetCursorStateStoredValue(self, stateKey, controlId)
+    if not self or not self.db or not self.db.profile then
+        return nil
+    end
+
+    local profileKey = GetCursorStateProfileKey(stateKey, controlId)
+    if not profileKey then
+        return nil
+    end
+
+    return self.db.profile[profileKey]
+end
+
+local function GetCursorAdjustmentValue(self, entry, controlId)
+    if not entry then
         return 0
     end
 
-    local profileKey = config[controlId .. "Key"]
-    local value = self.db.profile[profileKey]
-    if value == nil then
-        value = GetCursorStateDefaultValue(self, stateKey, controlId)
+    local preferredStates = {}
+    if entry.primaryState then
+        preferredStates[#preferredStates + 1] = entry.primaryState
     end
 
-    return value
+    for _, stateKey in ipairs(entry.states or {}) do
+        if stateKey ~= entry.primaryState then
+            preferredStates[#preferredStates + 1] = stateKey
+        end
+    end
+
+    for _, stateKey in ipairs(preferredStates) do
+        local value = GetCursorStateStoredValue(self, stateKey, controlId)
+        if value ~= nil then
+            return value
+        end
+    end
+
+    local defaultStateKey = entry.sharedDefaultsState or entry.primaryState or (entry.states and entry.states[1])
+    if defaultStateKey then
+        return GetCursorStateDefaultValue(self, defaultStateKey, controlId)
+    end
+
+    return 0
 end
 
-local function SetCursorStateValue(self, stateKey, controlId, value)
-    local config = GetCursorStateConfig(stateKey)
-    if not config or not self or not self.db or not self.db.profile then
+local function SetCursorAdjustmentValue(self, entry, controlId, value)
+    if not entry or not self or not self.db or not self.db.profile then
         return
     end
 
-    self.db.profile[config[controlId .. "Key"]] = value
+    for _, stateKey in ipairs(entry.states or {}) do
+        local profileKey = GetCursorStateProfileKey(stateKey, controlId)
+        if profileKey then
+            self.db.profile[profileKey] = value
+        end
+    end
 
     if self.RefreshActiveState then
         self:RefreshActiveState()
     end
 end
 
-local function ResetCursorStateToDefaults(self, stateKey)
-    local config = GetCursorStateConfig(stateKey)
-    if not config or not self or not self.db or not self.db.profile then
+local function ResetCursorAdjustmentToDefaults(self, entry)
+    if not entry or not self or not self.db or not self.db.profile then
         return
     end
 
     for _, control in ipairs(CURSOR_SLIDER_DEFS) do
-        local profileKey = config[control.id .. "Key"]
-        self.db.profile[profileKey] = GetCursorStateDefaultValue(self, stateKey, control.id)
+        local defaultStateKey = entry.sharedDefaultsState or entry.primaryState or (entry.states and entry.states[1])
+        local defaultValue = defaultStateKey and GetCursorStateDefaultValue(self, defaultStateKey, control.id) or 0
+
+        for _, stateKey in ipairs(entry.states or {}) do
+            local profileKey = GetCursorStateProfileKey(stateKey, control.id)
+            if profileKey then
+                self.db.profile[profileKey] = defaultValue
+            end
+        end
     end
 
     if self.RefreshActiveState then
@@ -1126,6 +1155,11 @@ end
 ------------------------------------------------------------------------------------
 -- GENERAL PAGE BUILD
 ------------------------------------------------------------------------------------
+local CreateSectionPanel
+local CreateInlineCheckbox
+local SetValueSliderEnabled
+local CreateColorSwatchButton
+
 local function BuildGeneralPage(self, page)
     page.enableRow = CreateCheckboxRow(page.body, "Enable", "Master toggle")
     page.enableRow:SetPoint("TOPLEFT", 0, 0)
@@ -1143,10 +1177,6 @@ local function BuildGeneralPage(self, page)
         page:RefreshControls()
     end)
 
-    page.note = CreateText(page.body, "GameFontHighlightSmall", "Additional controls will be added later as needed", FONT_STYLES.muted)
-    page.note:SetPoint("TOPLEFT", page.testModeRow, "BOTTOMLEFT", 4, -14)
-    page.note:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
-
     page.RefreshControls = function(currentPage)
         currentPage.enableRow.check:SetChecked(GetAddonEnabled(self))
         currentPage.testModeRow.check:SetChecked(GetTestModeEnabled(self))
@@ -1156,7 +1186,7 @@ end
 ------------------------------------------------------------------------------------
 -- REUSABLE INFO PANEL BUILD
 ------------------------------------------------------------------------------------
-local function CreateSectionPanel(parent, title, bodyText)
+CreateSectionPanel = function(parent, title, bodyText)
     local panel = CreateSimplePanel(parent)
     panel:SetHeight(126)
     panel.bg:Show()
@@ -1304,7 +1334,7 @@ local function SetAppearanceGlobalAlpha(self, value)
     RefreshAppearance(self)
 end
 
-local function CreateInlineCheckbox(parent, title)
+CreateInlineCheckbox = function(parent, title)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(26)
 
@@ -1356,7 +1386,7 @@ local function SetInlineCheckboxStableEnabled(row, enabled)
     row:SetAlpha(enabled and 1 or 0.6)
 end
 
-local function SetValueSliderEnabled(row, enabled)
+SetValueSliderEnabled = function(row, enabled)
     if not row then
         return
     end
@@ -1385,7 +1415,7 @@ local function SetValueSliderEnabled(row, enabled)
     end
 end
 
-local function CreateColorSwatchButton(parent)
+CreateColorSwatchButton = function(parent)
     local button = CreateFrame("Button", nil, parent, BACKDROP_TEMPLATE)
     button:SetSize(26, 26)
 
@@ -1526,6 +1556,282 @@ local function OpenAppearanceColorPicker(self, onChanged)
     ColorPickerFrame:SetColorRGB(initialR, initialG, initialB)
     ColorPickerFrame:Hide()
     ColorPickerFrame:Show()
+end
+
+local function GetCursorTrailProfile(self)
+    if self and self.GetCursorTrailProfile then
+        return self:GetCursorTrailProfile()
+    end
+
+    return self and self.db and self.db.profile and self.db.profile.cursorTrail or nil
+end
+
+local function GetCursorTrailDefaults()
+    return ns.CursorTrailDefaults or {}
+end
+
+local function RefreshCursorTrail(self)
+    if self and self.RefreshCursorTrail then
+        self:RefreshCursorTrail()
+    end
+end
+
+local function GetCursorTrailEnabled(self)
+    local profile = GetCursorTrailProfile(self)
+    return profile and profile.enabled and true or false
+end
+
+local function SetCursorTrailEnabled(self, enabled)
+    if self and self.SetCursorTrailEnabled then
+        self:SetCursorTrailEnabled(enabled)
+        return
+    end
+
+    local profile = GetCursorTrailProfile(self)
+    if not profile then
+        return
+    end
+
+    profile.enabled = enabled and true or false
+    RefreshCursorTrail(self)
+end
+
+local function GetCursorTrailColor(self)
+    local profile = GetCursorTrailProfile(self)
+    local color = profile and profile.color or nil
+    local defaults = GetCursorTrailDefaults()
+    local defaultColor = defaults.color or {}
+    return (color and color.r) or defaultColor.r or 1,
+        (color and color.g) or defaultColor.g or 1,
+        (color and color.b) or defaultColor.b or 1
+end
+
+local function SetCursorTrailColor(self, r, g, b)
+    local profile = GetCursorTrailProfile(self)
+    if not profile then
+        return
+    end
+
+    profile.color = profile.color or {}
+    profile.color.r = r or 1
+    profile.color.g = g or 1
+    profile.color.b = b or 1
+
+    RefreshCursorTrail(self)
+end
+
+local function GetCursorTrailNumericValue(self, key, fallback)
+    local profile = GetCursorTrailProfile(self)
+    local defaults = GetCursorTrailDefaults()
+    if not profile or profile[key] == nil then
+        if defaults[key] ~= nil then
+            return defaults[key]
+        end
+
+        return fallback
+    end
+
+    return profile[key]
+end
+
+local function SetCursorTrailNumericValue(self, key, value)
+    local profile = GetCursorTrailProfile(self)
+    if not profile then
+        return
+    end
+
+    profile[key] = value
+    RefreshCursorTrail(self)
+end
+
+local function OpenCursorTrailColorPicker(self, onChanged)
+    if not ColorPickerFrame then
+        return
+    end
+
+    local initialR, initialG, initialB = GetCursorTrailColor(self)
+
+    local function ApplyPickerColor(colorData)
+        local r, g, b = GetColorPickerRGB(colorData)
+        if r == nil or g == nil or b == nil then
+            return
+        end
+
+        SetCursorTrailColor(self, r, g, b)
+
+        if onChanged then
+            onChanged()
+        end
+    end
+
+    local function CancelPickerColor(previousValues)
+        local r, g, b = GetColorDataRGB(previousValues)
+        if r == nil or g == nil or b == nil then
+            r, g, b = initialR, initialG, initialB
+        end
+
+        SetCursorTrailColor(self, r, g, b)
+
+        if onChanged then
+            onChanged()
+        end
+    end
+
+    if ColorPickerFrame.SetupColorPickerAndShow then
+        local info = {}
+        info.r = initialR
+        info.g = initialG
+        info.b = initialB
+        info.hasOpacity = false
+        info.swatchFunc = function(...)
+            ApplyPickerColor(select(1, ...))
+        end
+        info.cancelFunc = function(previousValues)
+            CancelPickerColor(previousValues)
+        end
+        ColorPickerFrame:SetupColorPickerAndShow(info)
+        return
+    end
+
+    ColorPickerFrame.func = function(...)
+        ApplyPickerColor(select(1, ...))
+    end
+    ColorPickerFrame.opacityFunc = nil
+    ColorPickerFrame.cancelFunc = function(previousValues)
+        CancelPickerColor(previousValues)
+    end
+    ColorPickerFrame.hasOpacity = false
+    ColorPickerFrame.opacity = 1
+    ColorPickerFrame.previousValues = { r = initialR, g = initialG, b = initialB }
+    ColorPickerFrame:SetColorRGB(initialR, initialG, initialB)
+    ColorPickerFrame:Hide()
+    ColorPickerFrame:Show()
+end
+
+local function BuildCursorTrailSection(self, page, anchorFrame)
+    page.trailSection = CreateSectionPanel(page.scrollContent, "Cursor Trail", "Adds a simple glowing trail behind the cursor while this feature is enabled.")
+    page.trailSection:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -18)
+    page.trailSection:SetPoint("TOPRIGHT", page.scrollContent, "TOPRIGHT", 0, 0)
+    page.trailSection:SetHeight(308)
+
+    page.trailTopRow = CreateFrame("Frame", nil, page.trailSection)
+    page.trailTopRow:SetPoint("TOPLEFT", page.trailSection.bodyText, "BOTTOMLEFT", 0, -12)
+    page.trailTopRow:SetPoint("TOPRIGHT", page.trailSection, "TOPRIGHT", -16, -66)
+    page.trailTopRow:SetHeight(28)
+
+    page.trailEnableToggle = CreateInlineCheckbox(page.trailTopRow, "Enable")
+    page.trailEnableToggle:SetPoint("TOPLEFT", 0, 0)
+    page.trailEnableToggle:SetWidth(120)
+    page.trailEnableToggle.check:SetScript("OnClick", function(button)
+        SetCursorTrailEnabled(self, button:GetChecked())
+        page:RefreshControls()
+    end)
+
+    page.trailColorLabel = CreateText(page.trailTopRow, "GameFontNormal", "Color", FONT_STYLES.sectionTitle)
+    page.trailColorLabel:SetPoint("LEFT", page.trailEnableToggle, "RIGHT", 30, -1)
+
+    page.trailColorSwatch = CreateColorSwatchButton(page.trailTopRow)
+    page.trailColorSwatch:SetPoint("LEFT", page.trailColorLabel, "RIGHT", 10, 0)
+    page.trailColorSwatch:SetScript("OnClick", function()
+        OpenCursorTrailColorPicker(self, function()
+            page:RefreshControls()
+        end)
+    end)
+
+    page.trailSizeSlider = CreateValueSlider(page.trailSection, "Size", 16, 72, 1)
+    page.trailSizeSlider:SetPoint("TOPLEFT", page.trailTopRow, "BOTTOMLEFT", 0, -18)
+    page.trailSizeSlider:SetWidth(180)
+    page.trailSizeSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.trailSizeSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = math.floor((value or 0) + 0.5)
+        page.trailSizeSlider:SetDisplayValue(roundedValue)
+        SetCursorTrailNumericValue(self, "size", roundedValue)
+    end)
+
+    page.trailAlphaSlider = CreateValueSlider(page.trailSection, "Alpha", 0.05, 1.0, 0.05)
+    page.trailAlphaSlider:SetPoint("TOPLEFT", page.trailSizeSlider, "TOPRIGHT", 18, 0)
+    page.trailAlphaSlider:SetWidth(180)
+    page.trailAlphaSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.trailAlphaSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = math.floor(((value or 0) * 100) + 0.5) / 100
+        page.trailAlphaSlider:SetDisplayValue(roundedValue)
+        SetCursorTrailNumericValue(self, "alpha", roundedValue)
+    end)
+
+    page.trailLifetimeSlider = CreateValueSlider(page.trailSection, "Lifetime", 0.10, 1.20, 0.05)
+    page.trailLifetimeSlider:SetPoint("TOPLEFT", page.trailAlphaSlider, "TOPRIGHT", 18, 0)
+    page.trailLifetimeSlider:SetPoint("TOPRIGHT", page.trailSection, "TOPRIGHT", -16, -98)
+    page.trailLifetimeSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.trailLifetimeSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = math.floor(((value or 0) * 100) + 0.5) / 100
+        page.trailLifetimeSlider:SetDisplayValue(roundedValue)
+        SetCursorTrailNumericValue(self, "lifetime", roundedValue)
+    end)
+
+    page.trailLengthSlider = CreateValueSlider(page.trailSection, "Trail Length", 24, 300, 4)
+    page.trailLengthSlider:SetPoint("TOPLEFT", page.trailSizeSlider, "BOTTOMLEFT", 0, -34)
+    page.trailLengthSlider:SetWidth(180)
+    page.trailLengthSlider.slider:SetScript("OnValueChanged", function(_, value)
+        if page.trailLengthSlider.isUpdating then
+            return
+        end
+
+        local roundedValue = math.floor(((value or 0) / 4) + 0.5) * 4
+        page.trailLengthSlider:SetDisplayValue(roundedValue)
+        SetCursorTrailNumericValue(self, "trailLength", roundedValue)
+    end)
+
+    page.trailLengthNote = CreateText(page.trailSection, "GameFontHighlightSmall", "Higher values can reduce performance on some systems.", FONT_STYLES.muted)
+    page.trailLengthNote:SetPoint("TOPLEFT", page.trailLengthSlider, "BOTTOMLEFT", 4, -8)
+    page.trailLengthNote:SetPoint("RIGHT", page.trailSection, "RIGHT", -16, 0)
+
+    page.trailNote = CreateText(page.scrollContent, "GameFontHighlightSmall", "Trail controls save per profile and update live while the panel is open", FONT_STYLES.muted)
+    page.trailNote:SetPoint("TOPLEFT", page.trailSection, "BOTTOMLEFT", 4, -14)
+    page.trailNote:SetPoint("RIGHT", page.scrollContent, "RIGHT", 0, 0)
+
+    page.RefreshTrailControls = function(currentPage)
+        local trailEnabled = GetCursorTrailEnabled(self)
+        local trailColorR, trailColorG, trailColorB = GetCursorTrailColor(self)
+
+        currentPage.trailEnableToggle.check:SetChecked(trailEnabled)
+        currentPage.trailColorSwatch:SetSwatchColor(trailColorR, trailColorG, trailColorB)
+        currentPage.trailColorSwatch:SetEnabledState(trailEnabled)
+        StyleText(currentPage.trailColorLabel, trailEnabled and FONT_STYLES.sectionTitle or FONT_STYLES.muted)
+
+        currentPage.trailSizeSlider.isUpdating = true
+        currentPage.trailSizeSlider.slider:SetValue(GetCursorTrailNumericValue(self, "size", 34))
+        currentPage.trailSizeSlider:SetDisplayValue(GetCursorTrailNumericValue(self, "size", 34))
+        currentPage.trailSizeSlider.isUpdating = false
+
+        currentPage.trailAlphaSlider.isUpdating = true
+        currentPage.trailAlphaSlider.slider:SetValue(GetCursorTrailNumericValue(self, "alpha", 0.60))
+        currentPage.trailAlphaSlider:SetDisplayValue(GetCursorTrailNumericValue(self, "alpha", 0.60))
+        currentPage.trailAlphaSlider.isUpdating = false
+
+        currentPage.trailLifetimeSlider.isUpdating = true
+        currentPage.trailLifetimeSlider.slider:SetValue(GetCursorTrailNumericValue(self, "lifetime", 0.42))
+        currentPage.trailLifetimeSlider:SetDisplayValue(GetCursorTrailNumericValue(self, "lifetime", 0.42))
+        currentPage.trailLifetimeSlider.isUpdating = false
+
+        currentPage.trailLengthSlider.isUpdating = true
+        currentPage.trailLengthSlider.slider:SetValue(GetCursorTrailNumericValue(self, "trailLength", 72))
+        currentPage.trailLengthSlider:SetDisplayValue(GetCursorTrailNumericValue(self, "trailLength", 72))
+        currentPage.trailLengthSlider.isUpdating = false
+
+        SetValueSliderEnabled(currentPage.trailSizeSlider, trailEnabled)
+        SetValueSliderEnabled(currentPage.trailAlphaSlider, trailEnabled)
+        SetValueSliderEnabled(currentPage.trailLifetimeSlider, trailEnabled)
+        SetValueSliderEnabled(currentPage.trailLengthSlider, trailEnabled)
+    end
 end
 
 local function GetPlayerStateEffectData()
@@ -1936,8 +2242,15 @@ local function BuildEffectsPage(self, page)
             end
         end
 
-        local totalHeight = page.playerStateSection:GetHeight()
-            + sectionBottomPadding
+        local totalHeight = page.playerStateSection:GetHeight() + sectionBottomPadding
+
+        if page.trailSection then
+            local contentTop = page.playerStateSection:GetTop()
+            local contentBottom = (page.trailNote and page.trailNote:GetBottom()) or page.trailSection:GetBottom()
+            if contentTop and contentBottom then
+                totalHeight = math.max(1, math.floor((contentTop - contentBottom) + sectionBottomPadding + 0.5))
+            end
+        end
 
         page.scrollContent:SetHeight(math.max(viewportHeight, totalHeight))
     end
@@ -2189,6 +2502,8 @@ local function BuildEffectsPage(self, page)
         page:RefreshControls()
     end)
 
+    BuildCursorTrailSection(self, page, page.playerStateSection)
+
     page.RefreshControls = function(currentPage)
         if not currentPage.selectedEffectKey then
             currentPage.selectedEffectKey = PLAYER_STATE_EFFECT_ORDER[1]
@@ -2229,6 +2544,7 @@ local function BuildEffectsPage(self, page)
         SetValueSliderEnabled(currentPage.pulseStrengthSlider, pulseEnabled)
         SetValueSliderEnabled(currentPage.transitionSpeedSlider, enabled)
         SetButtonEnabled(currentPage.resetButton, enabled)
+        currentPage:RefreshTrailControls()
 
         UpdateEffectsScrollLayout()
     end
@@ -2248,7 +2564,7 @@ local function RefreshCursorEditor(page)
     end
 
     for _, control in ipairs(page.editorControls or {}) do
-        local value = GetCursorStateValue(page.owner, page.selectedStateKey, control.controlId)
+        local value = GetCursorAdjustmentValue(page.owner, entry, control.controlId)
         control.isUpdating = true
         control.slider:SetValue(value)
         control:SetDisplayValue(value)
@@ -2335,7 +2651,7 @@ local function BuildCursorsPage(self, page)
 
             local roundedValue = math.floor((value / controlStep) + 0.5) * controlStep
             currentControl:SetDisplayValue(roundedValue)
-            SetCursorStateValue(self, page.selectedStateKey, currentControl.controlId, roundedValue)
+            SetCursorAdjustmentValue(self, page.stateLookup[page.selectedStateKey], currentControl.controlId, roundedValue)
         end)
 
         page.editorControls[#page.editorControls + 1] = control
@@ -2351,7 +2667,7 @@ local function BuildCursorsPage(self, page)
             return
         end
 
-        ResetCursorStateToDefaults(self, page.selectedStateKey)
+        ResetCursorAdjustmentToDefaults(self, page.stateLookup[page.selectedStateKey])
         RefreshCursorEditor(page)
     end)
 

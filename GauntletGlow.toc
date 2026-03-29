@@ -30,6 +30,7 @@ Libs\GLiB\Tooltip.lua
 # CORE
 # --------------------------------------------------
 Core.lua
+MediaRegistry.lua
 States.lua
 
 # --------------------------------------------------
@@ -37,6 +38,7 @@ States.lua
 # --------------------------------------------------
 Tooltip.lua
 Cursor.lua
+CursorTrail.lua
 QuestieIntegration.lua
 Trigger.lua
 Options.lua

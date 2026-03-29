@@ -1,4 +1,7 @@
 local ADDON_NAME, ns = ...
+local strlower = strlower
+local strsplit = strsplit
+local strtrim = strtrim
 
 ns.CursorStateDefaults = ns.CursorStateDefaults or {
     DEFAULT = {
@@ -135,6 +138,20 @@ ns.CursorStateDefaults = ns.CursorStateDefaults or {
     },
 }
 
+ns.CursorTrailDefaults = ns.CursorTrailDefaults or {
+    enabled = false,
+    size = 34,
+    alpha = 0.60,
+    lifetime = 0.42,
+    trailLength = 72,
+    spacing = 12,
+    color = {
+        r = 0.32,
+        g = 0.86,
+        b = 1.00,
+    },
+}
+
 ns.PlayerStateEffects = ns.PlayerStateEffects or {
     order = {
         "LOW_HEALTH",
@@ -227,6 +244,8 @@ ns.PlayerStateEffects = ns.PlayerStateEffects or {
         },
     },
 }
+
+ns.CursorStateDefaults.QUEST_INCOMPLETE = ns.CursorStateDefaults.QUEST_INCOMPLETE or ns.CursorStateDefaults.QUEST_AVAILABLE
 
 local CURSOR_STATE_PROFILE_KEYS = {
     DEFAULT = {
@@ -363,6 +382,8 @@ local CURSOR_STATE_PROFILE_KEYS = {
     },
 }
 
+CURSOR_STATE_PROFILE_KEYS.QUEST_INCOMPLETE = CURSOR_STATE_PROFILE_KEYS.QUEST_INCOMPLETE or CURSOR_STATE_PROFILE_KEYS.QUEST_AVAILABLE
+
 local function CopyTable(source)
     local copy = {}
 
@@ -393,6 +414,7 @@ local function CreateProfileDefaults()
         effects = {
             playerStates = {},
         },
+        cursorTrail = CopyTable(ns.CursorTrailDefaults),
     }
 
     for stateKey, profileKeys in pairs(CURSOR_STATE_PROFILE_KEYS) do
@@ -470,9 +492,10 @@ function GG:OnEnable()
     self:StartCursorMovement()
     self:StartTriggerLoop()
     self:SetupOptions()
+    self:RefreshCursorTrail()
 
-    self:RegisterChatCommand("gg", "OpenConfig")
-    self:RegisterChatCommand("gauntletglow", "OpenConfig")
+    self:RegisterChatCommand("gg", "HandleChatCommand")
+    self:RegisterChatCommand("gauntletglow", "HandleChatCommand")
 
     self:RegisterEvent("LOOT_OPENED")
     self:RegisterEvent("MERCHANT_SHOW")
@@ -513,6 +536,10 @@ function GG:OnDisable()
     if self.cleanupTimer then
         self:CancelTimer(self.cleanupTimer)
         self.cleanupTimer = nil
+    end
+
+    if ns.CursorTrail and ns.CursorTrail.Shutdown then
+        ns.CursorTrail:Shutdown()
     end
 end
 
@@ -601,4 +628,146 @@ function GG:SetPlayerStateEffectPreview(effectKey, enabled)
     elseif self.RefreshGlowAppearance then
         self:RefreshGlowAppearance()
     end
+end
+
+function GG:GetCursorTrailProfile()
+    local profile = self.db and self.db.profile
+    if not profile then
+        return nil
+    end
+
+    profile.cursorTrail = profile.cursorTrail or {}
+
+    local cursorTrailProfile = profile.cursorTrail
+    local defaults = ns.CursorTrailDefaults or {}
+
+    if cursorTrailProfile.enabled == nil then
+        cursorTrailProfile.enabled = defaults.enabled and true or false
+    end
+
+    if cursorTrailProfile.size == nil then
+        cursorTrailProfile.size = defaults.size or 34
+    end
+
+    if cursorTrailProfile.alpha == nil then
+        cursorTrailProfile.alpha = defaults.alpha or 0.6
+    end
+
+    if cursorTrailProfile.lifetime == nil then
+        cursorTrailProfile.lifetime = defaults.lifetime or 0.42
+    end
+
+    if cursorTrailProfile.trailLength == nil then
+        cursorTrailProfile.trailLength = defaults.trailLength or 72
+    end
+
+    if cursorTrailProfile.spacing == nil then
+        cursorTrailProfile.spacing = defaults.spacing or 12
+    end
+
+    if type(cursorTrailProfile.color) ~= "table" then
+        cursorTrailProfile.color = {}
+    end
+
+    local colorDefaults = defaults.color or {}
+    if cursorTrailProfile.color.r == nil then
+        cursorTrailProfile.color.r = colorDefaults.r or 1
+    end
+    if cursorTrailProfile.color.g == nil then
+        cursorTrailProfile.color.g = colorDefaults.g or 1
+    end
+    if cursorTrailProfile.color.b == nil then
+        cursorTrailProfile.color.b = colorDefaults.b or 1
+    end
+
+    return cursorTrailProfile
+end
+
+function GG:GetCursorTrailSettings()
+    local profile = self:GetCursorTrailProfile()
+    if not profile then
+        return nil
+    end
+
+    local addonProfile = self.db and self.db.profile or nil
+    local addonEnabled = addonProfile and addonProfile.enabled
+
+    return {
+        enabled = (addonEnabled ~= false) and (profile.enabled and true or false),
+        colorR = profile.color.r or 1,
+        colorG = profile.color.g or 1,
+        colorB = profile.color.b or 1,
+        size = profile.size or 34,
+        alpha = profile.alpha or 0.6,
+        lifetime = profile.lifetime or 0.42,
+        trailLength = profile.trailLength or 72,
+        spacing = profile.spacing or 12,
+    }
+end
+
+function GG:RefreshCursorTrail()
+    if ns.CursorTrail and ns.CursorTrail.Refresh then
+        ns.CursorTrail:Refresh()
+    end
+end
+
+function GG:SetCursorTrailEnabled(enabled)
+    local profile = self:GetCursorTrailProfile()
+    if not profile then
+        return
+    end
+
+    profile.enabled = enabled and true or false
+    self:RefreshCursorTrail()
+end
+
+local function ParseTrailToggleCommand(input)
+    if not input or input == "" then
+        return nil
+    end
+
+    local command, rest = strsplit(" ", strlower(strtrim(input)), 2)
+    if command ~= "trail" then
+        return nil
+    end
+
+    local mode = rest and strtrim(rest) or ""
+    if mode == "" then
+        return "toggle"
+    end
+
+    if mode == "on" or mode == "off" or mode == "toggle" or mode == "status" then
+        return mode
+    end
+
+    return "invalid"
+end
+
+function GG:HandleChatCommand(input)
+    local trailCommand = ParseTrailToggleCommand(input)
+    if trailCommand then
+        if trailCommand == "invalid" then
+            self:Print("Usage: /gg trail on|off|toggle|status")
+            return
+        end
+
+        local trailProfile = self:GetCursorTrailProfile()
+        local enabled = trailProfile and trailProfile.enabled and true or false
+
+        if trailCommand == "toggle" then
+            enabled = not enabled
+            self:SetCursorTrailEnabled(enabled)
+        elseif trailCommand == "on" then
+            enabled = true
+            self:SetCursorTrailEnabled(true)
+        elseif trailCommand == "off" then
+            enabled = false
+            self:SetCursorTrailEnabled(false)
+        end
+
+        self:Print("Cursor trail " .. (enabled and "enabled." or "disabled."))
+        return
+    end
+
+    self:OpenConfig()
 end
