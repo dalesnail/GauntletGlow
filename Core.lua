@@ -103,6 +103,12 @@ ns.CursorStateDefaults = ns.CursorStateDefaults or {
         offsetX = 12,
         offsetY = -14.5,
     },
+    COGWHEEL = {
+        sizeX = 64,
+        sizeY = 64,
+        offsetX = 14,
+        offsetY = -14,
+    },
     FINANCE = {
         sizeX = 64,
         sizeY = 64,
@@ -248,6 +254,21 @@ ns.PlayerStateEffects = ns.PlayerStateEffects or {
     },
 }
 
+ns.QuestieObjectiveEffectDefaults = ns.QuestieObjectiveEffectDefaults or {
+    enabled = false,
+    colorR = 1.0,
+    colorG = 0.82,
+    colorB = 0.20,
+    tintStrength = 0.65,
+    brightness = 1.08,
+    alpha = 1,
+    desaturate = true,
+    pulseEnabled = false,
+    pulseSpeed = 1.00,
+    pulseStrength = 0,
+    transitionSpeed = 5.00,
+}
+
 ns.CursorStateDefaults.QUEST_INCOMPLETE = ns.CursorStateDefaults.QUEST_INCOMPLETE or ns.CursorStateDefaults.QUEST_AVAILABLE
 
 local CURSOR_STATE_PROFILE_KEYS = {
@@ -347,6 +368,12 @@ local CURSOR_STATE_PROFILE_KEYS = {
         offsetX = "questTurnInOffsetX",
         offsetY = "questTurnInOffsetY",
     },
+    COGWHEEL = {
+        sizeX = "cogwheelSizeX",
+        sizeY = "cogwheelSizeY",
+        offsetX = "cogwheelOffsetX",
+        offsetY = "cogwheelOffsetY",
+    },
     FINANCE = {
         sizeX = "bankerSizeX",
         sizeY = "bankerSizeY",
@@ -414,8 +441,10 @@ local function CreateProfileDefaults()
         brightness = 1,
         useGlobalAlpha = false,
         globalAlpha = 1,
+        blendMode = "GLOW",
         effects = {
             playerStates = {},
+            questieHighlight = CopyTable(ns.QuestieObjectiveEffectDefaults),
         },
         cursorTrail = CopyTable(ns.CursorTrailDefaults),
     }
@@ -515,6 +544,7 @@ function GG:OnInitialize()
     self.lootedUnits = {}
     self.recentCorpseGUIDs = {}
     self.lastMouseoverGUID = nil
+    self.questieObjectiveHoverActive = false
     self.playerStateEffectPreviewEnabled = false
     self.playerStateEffectPreviewKey = nil
     self.States = ns.States
@@ -773,6 +803,43 @@ function GG:GetCursorTrailSettings()
         trailLength = profile.trailLength or 72,
         spacing = profile.spacing or 12,
     }
+end
+
+function GG:GetQuestieObjectiveEffectDefaults()
+    return ns.QuestieObjectiveEffectDefaults or nil
+end
+
+function GG:GetQuestieObjectiveEffectProfile()
+    local profile = self.db and self.db.profile
+    local effects = profile and profile.effects
+    if not effects then
+        return nil
+    end
+
+    if type(effects.questieHighlight) ~= "table" then
+        effects.questieHighlight = CopyTable(self:GetQuestieObjectiveEffectDefaults() or {})
+    end
+
+    return effects.questieHighlight
+end
+
+function GG:GetQuestieObjectiveEffectValue(valueKey)
+    local profile = self:GetQuestieObjectiveEffectProfile()
+    if profile and profile[valueKey] ~= nil then
+        return profile[valueKey]
+    end
+
+    local defaults = self:GetQuestieObjectiveEffectDefaults()
+    if defaults and defaults[valueKey] ~= nil then
+        return defaults[valueKey]
+    end
+
+    return nil
+end
+
+function GG:IsQuestieObjectiveEffectEnabled()
+    local enabled = self:GetQuestieObjectiveEffectValue("enabled")
+    return enabled and true or false
 end
 
 function GG:RefreshCursorTrail()

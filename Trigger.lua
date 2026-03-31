@@ -22,6 +22,10 @@ local IsModifiedClick = IsModifiedClick
 local GetTime = GetTime
 local GetProfessions = GetProfessions
 local GetProfessionInfo = GetProfessionInfo
+local GetNumSpellTabs = GetNumSpellTabs
+local GetSpellBookItemName = GetSpellBookItemName
+local GetSpellTabInfo = GetSpellTabInfo
+local IsSpellKnown = IsSpellKnown
 local IsMounted = IsMounted
 local IsResting = IsResting
 local CanMerchantRepair = CanMerchantRepair
@@ -36,6 +40,10 @@ local table = table
 
 local Tooltip = ns.Tooltip
 local QuestieIntegration = ns.QuestieIntegration
+
+local FIND_HERBS_SPELL_ID = 2383
+local FIND_MINERALS_SPELL_ID = 2580
+local BOOKTYPE_SPELL = BOOKTYPE_SPELL
 
 -- ############################################################
 -- GLiB Helpers
@@ -61,6 +69,15 @@ local function HasTooltipWorldTag(lines, tag)
     end
 
     return glib:TooltipWorldHasTag(lines, tag)
+end
+
+local function TooltipDisplaysUnit()
+    if not GameTooltip or type(GameTooltip.GetUnit) ~= "function" then
+        return false
+    end
+
+    local _, unit = GameTooltip:GetUnit()
+    return unit ~= nil
 end
 
 local function GetNpcIdFromGUID(guid)
@@ -194,19 +211,55 @@ end
 -- Profession Checks
 -- #################################################
 
-local function PlayerHasSkinning()
+local function PlayerHasProfession(professionName)
     local prof1, prof2 = GetProfessions()
 
-    local function IsSkinning(index)
+    local function HasProfession(index)
         if not index then
             return false
         end
 
         local name = GetProfessionInfo(index)
-        return name == "Skinning"
+        return name == professionName
     end
 
-    return IsSkinning(prof1) or IsSkinning(prof2)
+    return HasProfession(prof1) or HasProfession(prof2)
+end
+
+local function PlayerKnowsSpell(spellID, spellName)
+    if type(IsSpellKnown) == "function" and type(spellID) == "number" and IsSpellKnown(spellID) then
+        return true
+    end
+
+    if type(GetNumSpellTabs) ~= "function" or type(GetSpellTabInfo) ~= "function" or type(GetSpellBookItemName) ~= "function" then
+        return false
+    end
+
+    for tabIndex = 1, GetNumSpellTabs() do
+        local _, _, offset, numSlots = GetSpellTabInfo(tabIndex)
+        if offset and numSlots then
+            for slotIndex = offset + 1, offset + numSlots do
+                local name = GetSpellBookItemName(slotIndex, BOOKTYPE_SPELL)
+                if name == spellName then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function PlayerHasSkinning()
+    return PlayerHasProfession("Skinning")
+end
+
+local function PlayerHasHerbalism()
+    return PlayerKnowsSpell(FIND_HERBS_SPELL_ID, "Find Herbs")
+end
+
+local function PlayerHasMining()
+    return PlayerKnowsSpell(FIND_MINERALS_SPELL_ID, "Find Minerals")
 end
 
 local function MerchantIsOpen()
@@ -466,6 +519,55 @@ local function IsRecentEligibleMouseoverCorpse()
     return GG:IsRecentCorpseGUID(guid)
 end
 
+local function IsMouseoverCorpse()
+    return UnitExists("mouseover") and UnitIsDeadOrGhost("mouseover")
+end
+
+local function HasProfessionCorpseTooltip(lines)
+    return HasTooltipWorldTag(lines, "herbalism")
+        or HasTooltipWorldTag(lines, "mining")
+        or HasTooltipNpcTag(lines, "skinnable")
+end
+
+local function IsPostLootGatherable(lines)
+    if not lines or not IsMouseoverCorpse() then
+        return false
+    end
+
+    if not HasProfessionCorpseTooltip(lines) then
+        return false
+    end
+
+    if CanLootMouseoverCorpse() then
+        return false
+    end
+
+    return true
+end
+
+local function IsCorpseProfessionWorldTag(lines, tag)
+    return IsPostLootGatherable(lines) and HasTooltipWorldTag(lines, tag)
+end
+
+local function IsHerbalismCorpse(lines)
+    return IsCorpseProfessionWorldTag(lines, "herbalism") and PlayerHasHerbalism()
+end
+
+local function IsMiningCorpse(lines)
+    return IsCorpseProfessionWorldTag(lines, "mining") and PlayerHasMining()
+end
+
+local function GetCorpseProfessionState(lines)
+    if IsHerbalismCorpse(lines) then
+        return "HERBALISM"
+    end
+
+    if IsMiningCorpse(lines) then
+        return "MINING"
+    end
+
+    return nil
+end
 
 local function AddTooltipRoleCandidates(candidates, lines, name)
     local glib = GetGLiB()
@@ -547,11 +649,11 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
 end
 
 local function AddWorldTooltipCandidates(candidates, lines)
-    if HasTooltipWorldTag(lines, "herbalism") then
+    if not IsMouseoverCorpse() and HasTooltipWorldTag(lines, "herbalism") then
         table.insert(candidates, "HERBALISM")
     end
 
-    if HasTooltipWorldTag(lines, "mining") then
+    if not IsMouseoverCorpse() and HasTooltipWorldTag(lines, "mining") then
         table.insert(candidates, "MINING")
     end
 end
@@ -686,6 +788,19 @@ function GG:SetPlayerStateEffect(effectKey)
     end
 end
 
+function GG:SetQuestieObjectiveHoverActive(active)
+    active = active and true or false
+    if self.questieObjectiveHoverActive == active then
+        return
+    end
+
+    self.questieObjectiveHoverActive = active
+
+    if self.RefreshPlayerStateEffectTarget then
+        self:RefreshPlayerStateEffectTarget()
+    end
+end
+
 function GG:UpdatePlayerStateEffect()
     self:SetPlayerStateEffect(self:ResolvePlayerStateEffect())
 end
@@ -696,10 +811,12 @@ end
 
 function GG:EvaluateTrigger()
     if self.db.profile.testMode then
+        self:SetQuestieObjectiveHoverActive(false)
         return true, "DEFAULT"
     end
 
     if IsMouseButtonDown("RightButton") or IsMouseButtonDown("LeftButton") then
+        self:SetQuestieObjectiveHoverActive(false)
         return false
     end
 
@@ -719,6 +836,20 @@ function GG:EvaluateTrigger()
     if questieState then
         table.insert(candidates, questieState)
     end
+
+    local questieObjectObjectiveActive = QuestieIntegration
+        and QuestieIntegration.IsMouseoverActiveObjectObjective
+        and QuestieIntegration.IsMouseoverActiveObjectObjective()
+        or false
+    if questieObjectObjectiveActive then
+        table.insert(candidates, "COGWHEEL")
+    end
+
+    local questieObjectiveHoverActive = QuestieIntegration
+        and QuestieIntegration.IsMouseoverHostileObjectiveEnemy
+        and QuestieIntegration.IsMouseoverHostileObjectiveEnemy()
+        or false
+    self:SetQuestieObjectiveHoverActive(questieObjectiveHoverActive)
 
     if IsRepairModeActive() then
         table.insert(candidates, "REPAIR_HOVER")
@@ -741,19 +872,20 @@ function GG:EvaluateTrigger()
 
         if UnitIsDeadOrGhost("mouseover") then
             local timestamp = guid and self.lootedUnits[guid]
+            local wasRecentlyLooted = timestamp and (GetTime() - timestamp < 120)
+            local corpseProfessionState = GetCorpseProfessionState(lines)
+            local canLootCorpse = CanLootMouseoverCorpse()
 
-            if timestamp and (GetTime() - timestamp < 120) then
-                table.insert(candidates, "DEFAULT")
+            if canLootCorpse and not wasRecentlyLooted then
+                local autoLoot = GetCVar("autoLootDefault") == "1"
+                local modifier = IsModifiedClick("AUTOLOOTTOGGLE")
+                local isAutoLoot = (autoLoot and not modifier) or (not autoLoot and modifier)
+
+                table.insert(candidates, isAutoLoot and "AUTOLOOT" or "LOOT")
+            elseif corpseProfessionState then
+                table.insert(candidates, corpseProfessionState)
             else
-                if CanLootMouseoverCorpse() or (IsRecentEligibleMouseoverCorpse() and not UnitIsTapDenied("mouseover")) then
-                    local autoLoot = GetCVar("autoLootDefault") == "1"
-                    local modifier = IsModifiedClick("AUTOLOOTTOGGLE")
-                    local isAutoLoot = (autoLoot and not modifier) or (not autoLoot and modifier)
-
-                    table.insert(candidates, isAutoLoot and "AUTOLOOT" or "LOOT")
-                else
-                    table.insert(candidates, "DEFAULT")
-                end
+                table.insert(candidates, "DEFAULT")
             end
         end
 

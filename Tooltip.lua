@@ -3,11 +3,11 @@
 -- ############################################################
 
 local ADDON_NAME, ns = ...
-local GG = ns.GauntletGlow
 
 local Tooltip = {}
 
 local GameTooltip = GameTooltip
+local UnitExists = UnitExists
 local wipe = wipe
 
 local tooltipLinesBuffer = {}
@@ -57,23 +57,52 @@ local function CollectTooltipLines()
     return tooltipLinesBuffer
 end
 
+local function TooltipIsCurrent()
+    if UnitExists("mouseover") then
+        return true
+    end
+
+    if not GameTooltip or not GameTooltip:IsShown() then
+        return false
+    end
+
+    return (GameTooltip:NumLines() or 0) > 0
+end
+
 -- ############################################################
 -- PUBLIC API
 -- ############################################################
 
 function Tooltip:GetName()
+    if not TooltipIsCurrent() then
+        return nil
+    end
+
     return GetTooltipLine(1)
 end
 
 function Tooltip:GetLine2()
+    if not TooltipIsCurrent() then
+        return nil
+    end
+
     return GetTooltipLine(2)
 end
 
 function Tooltip:GetLine3()
+    if not TooltipIsCurrent() then
+        return nil
+    end
+
     return GetTooltipLine(3)
 end
 
 function Tooltip:GetLines()
+    if not TooltipIsCurrent() then
+        wipe(tooltipLinesBuffer)
+        return tooltipLinesBuffer
+    end
+
     return CollectTooltipLines()
 end
 

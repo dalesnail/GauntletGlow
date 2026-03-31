@@ -141,6 +141,15 @@ local function GetBaseAppearance(self)
     return colorR, colorG, colorB, alpha, desaturate
 end
 
+local function GetConfiguredTextureBlendMode(self)
+    local profile = self and self.db and self.db.profile
+    if profile and profile.blendMode == "OPAQUE" then
+        return "BLEND"
+    end
+
+    return "ADD"
+end
+
 local function GetNeutralEffectValues()
     local neutral = (ns.PlayerStateEffects and ns.PlayerStateEffects.neutral) or {}
     return {
@@ -157,7 +166,37 @@ local function GetNeutralEffectValues()
     }
 end
 
+local function GetQuestieObjectiveEffectValues(self)
+    local values = GetNeutralEffectValues()
+    if not self.questieObjectiveHoverActive or not self:IsQuestieObjectiveEffectEnabled() then
+        return nil
+    end
+
+    values.colorR = self:GetQuestieObjectiveEffectValue("colorR") or values.colorR
+    values.colorG = self:GetQuestieObjectiveEffectValue("colorG") or values.colorG
+    values.colorB = self:GetQuestieObjectiveEffectValue("colorB") or values.colorB
+    values.tintStrength = self:GetQuestieObjectiveEffectValue("tintStrength") or values.tintStrength
+    values.brightness = self:GetQuestieObjectiveEffectValue("brightness") or values.brightness
+    values.alpha = self:GetQuestieObjectiveEffectValue("alpha") or values.alpha
+    values.desaturate = self:GetQuestieObjectiveEffectValue("desaturate") and true or false
+    values.transitionSpeed = self:GetQuestieObjectiveEffectValue("transitionSpeed") or values.transitionSpeed
+
+    if self:GetQuestieObjectiveEffectValue("pulseEnabled") then
+        values.pulseSpeed = self:GetQuestieObjectiveEffectValue("pulseSpeed") or values.pulseSpeed
+        values.pulseStrength = self:GetQuestieObjectiveEffectValue("pulseStrength") or values.pulseStrength
+    else
+        values.pulseStrength = 0
+    end
+
+    return values
+end
+
 local function GetTargetEffectValues(self, effectKey)
+    local questieValues = GetQuestieObjectiveEffectValues(self)
+    if questieValues then
+        return questieValues
+    end
+
     local values = GetNeutralEffectValues()
     local previewActive = self.IsPlayerStateEffectPreviewActive and self:IsPlayerStateEffectPreviewActive(effectKey)
     if not effectKey or (not previewActive and not self:IsPlayerStateEffectEnabled(effectKey)) then
@@ -251,12 +290,24 @@ function GG:RefreshGlowAppearance()
         return
     end
 
+    local blendMode = GetConfiguredTextureBlendMode(self)
+    local baseVisualState = glow.baseVisualState or {}
+    if baseVisualState.blendMode ~= blendMode then
+        tex:SetBlendMode(blendMode)
+        baseVisualState.blendMode = blendMode
+    end
+
+    local overlayVisualState = glow.overlayVisualState or {}
+    if effectTex and overlayVisualState.blendMode ~= blendMode then
+        effectTex:SetBlendMode(blendMode)
+        overlayVisualState.blendMode = blendMode
+    end
+
     local composite = GetEffectComposite(self)
     local baseR = Clamp(composite.colorR * composite.baseIntensity, 0, 1)
     local baseG = Clamp(composite.colorG * composite.baseIntensity, 0, 1)
     local baseB = Clamp(composite.colorB * composite.baseIntensity, 0, 1)
     local baseAlpha = composite.alpha
-    local baseVisualState = glow.baseVisualState or {}
 
     if not NearlyEqual(baseVisualState.colorR, baseR)
         or not NearlyEqual(baseVisualState.colorG, baseG)
@@ -284,7 +335,6 @@ function GG:RefreshGlowAppearance()
         local overlayG = Clamp(composite.colorG * composite.overlayScale, 0, 1)
         local overlayB = Clamp(composite.colorB * composite.overlayScale, 0, 1)
         local overlayAlpha = composite.overlayAlpha > 0.001 and composite.overlayAlpha or 0
-        local overlayVisualState = glow.overlayVisualState or {}
 
         if not NearlyEqual(overlayVisualState.colorR, overlayR)
             or not NearlyEqual(overlayVisualState.colorG, overlayG)
@@ -447,6 +497,12 @@ function GG:ApplyState(stateName, force)
         sizeY = self.db.profile.questTurnInSizeY or sizeY
         offsetX = self.db.profile.questTurnInOffsetX or offsetX
         offsetY = self.db.profile.questTurnInOffsetY or offsetY
+
+    elseif stateName == "COGWHEEL" then
+        sizeX = self.db.profile.cogwheelSizeX or sizeX
+        sizeY = self.db.profile.cogwheelSizeY or sizeY
+        offsetX = self.db.profile.cogwheelOffsetX or offsetX
+        offsetY = self.db.profile.cogwheelOffsetY or offsetY
 
     elseif stateName == "FINANCE" then
         sizeX = self.db.profile.bankerSizeX or sizeX

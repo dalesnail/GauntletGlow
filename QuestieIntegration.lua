@@ -4,8 +4,12 @@ local QuestieIntegration = ns.QuestieIntegration or {}
 ns.QuestieIntegration = QuestieIntegration
 
 local CreateFrame = CreateFrame
+local GameTooltip = GameTooltip
 local UnitExists = UnitExists
 local UnitGUID = UnitGUID
+local UnitCanAttack = UnitCanAttack
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local IsInInstance = IsInInstance
 local IsAddOnLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
 local C_QuestLog = C_QuestLog
 local GetNumQuestLogEntries = GetNumQuestLogEntries
@@ -13,9 +17,11 @@ local GetQuestLogTitle = GetQuestLogTitle
 local pcall = pcall
 local pairs = pairs
 local ipairs = ipairs
+local next = next
 local rawget = rawget
 local strlower = strlower
 local strsplit = strsplit
+local strtrim = strtrim
 local tonumber = tonumber
 local type = type
 
@@ -24,6 +30,8 @@ local questieState = {
     readyCallbackRegistered = false,
     tooltipModule = nil,
     questDbModule = nil,
+    l10nModule = nil,
+    playerModule = nil,
     activeFinisherNpcIds = {},
     activeFinisherNpcIdsDirty = true,
 }
@@ -40,6 +48,8 @@ local function ResetQuestieState()
     questieState.readyCallbackRegistered = false
     questieState.tooltipModule = nil
     questieState.questDbModule = nil
+    questieState.l10nModule = nil
+    questieState.playerModule = nil
     questieState.activeFinisherNpcIds = {}
     questieState.activeFinisherNpcIdsDirty = true
 end
@@ -89,6 +99,8 @@ local function RefreshQuestieReadyState()
             questieState.ready = true
             questieState.tooltipModule = nil
             questieState.questDbModule = nil
+            questieState.l10nModule = nil
+            questieState.playerModule = nil
             questieState.activeFinisherNpcIdsDirty = true
         end)
 
@@ -174,6 +186,72 @@ local function GetQuestDbModule()
     return nil
 end
 
+local function GetL10nModule()
+    if type(questieState.l10nModule) == "table" then
+        return questieState.l10nModule
+    end
+
+    local loader = _G.QuestieLoader
+    if type(loader) ~= "table" then
+        return nil
+    end
+
+    local modules = rawget(loader, "_modules")
+    local module = type(modules) == "table" and modules.l10n or nil
+    if type(module) == "table" then
+        questieState.l10nModule = module
+        return module
+    end
+
+    if type(loader.ImportModule) ~= "function" then
+        return nil
+    end
+
+    local ok, loadedModule = pcall(function()
+        return loader:ImportModule("l10n")
+    end)
+
+    if ok and type(loadedModule) == "table" then
+        questieState.l10nModule = loadedModule
+        return loadedModule
+    end
+
+    return nil
+end
+
+local function GetPlayerModule()
+    if type(questieState.playerModule) == "table" then
+        return questieState.playerModule
+    end
+
+    local loader = _G.QuestieLoader
+    if type(loader) ~= "table" then
+        return nil
+    end
+
+    local modules = rawget(loader, "_modules")
+    local module = type(modules) == "table" and modules.QuestiePlayer or nil
+    if type(module) == "table" then
+        questieState.playerModule = module
+        return module
+    end
+
+    if type(loader.ImportModule) ~= "function" then
+        return nil
+    end
+
+    local ok, loadedModule = pcall(function()
+        return loader:ImportModule("QuestiePlayer")
+    end)
+
+    if ok and type(loadedModule) == "table" then
+        questieState.playerModule = loadedModule
+        return loadedModule
+    end
+
+    return nil
+end
+
 local function GetMouseoverNpcId()
     if not UnitExists("mouseover") then
         return nil
@@ -190,6 +268,60 @@ local function GetMouseoverNpcId()
     end
 
     return tonumber(npcId)
+end
+
+local function GetTooltipLine(index)
+    if not index or index < 1 then
+        return nil
+    end
+
+    local text = _G["GameTooltipTextLeft" .. index]
+    if not text then
+        return nil
+    end
+
+    local value = text:GetText()
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    value = strtrim(value)
+    if value == "" then
+        return nil
+    end
+
+    return value
+end
+
+local function GetMouseoverNpcTooltipEntries()
+    local npcId = GetMouseoverNpcId()
+    if not npcId then
+        return nil, nil, nil
+    end
+
+    local guid = UnitGUID("mouseover")
+    local tooltipModule = GetTooltipModule()
+    local lookupByKey = tooltipModule and type(tooltipModule.lookupByKey) == "table" and tooltipModule.lookupByKey or nil
+    local tooltipEntries = lookupByKey and lookupByKey["m_" .. npcId]
+
+    return npcId, guid, tooltipEntries
+end
+
+local function GetCurrentZoneId()
+    local playerModule = GetPlayerModule()
+    if type(playerModule) ~= "table" or type(playerModule.GetCurrentZoneId) ~= "function" then
+        return nil
+    end
+
+    local ok, zoneId = pcall(function()
+        return playerModule:GetCurrentZoneId()
+    end)
+
+    if ok and type(zoneId) == "number" then
+        return zoneId
+    end
+
+    return nil
 end
 
 local function GetPublicObjectiveIconHint(guid)
@@ -209,6 +341,40 @@ local function GetPublicObjectiveIconHint(guid)
     end
 
     return type(icon) == "string" and icon ~= "", true
+end
+
+local function IsHostileMouseoverUnit()
+    return UnitExists("mouseover")
+        and not UnitIsDeadOrGhost("mouseover")
+        and UnitCanAttack("player", "mouseover")
+        and true or false
+end
+
+local function IsActiveObjectObjectiveTooltip(tooltip)
+    if type(tooltip) ~= "table" or type(tooltip.questId) ~= "number" or tooltip.name then
+        return false
+    end
+
+    local objective = tooltip.objective
+    if type(objective) ~= "table" or type(objective.Update) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(function()
+        objective:Update()
+    end)
+    if not ok or objective.Completed then
+        return false
+    end
+
+    local questie = _G.Questie
+    if type(questie) ~= "table" then
+        return false
+    end
+
+    local iconType = objective.Icon
+    return iconType == questie.ICON_TYPE_OBJECT
+        or iconType == questie.ICON_TYPE_INTERACT
 end
 
 local function IsIncompleteQuestNpcObjective(tooltip, shouldUsePublicHint, hasPublicObjectiveIcon)
@@ -244,6 +410,47 @@ local function IsIncompleteQuestNpcObjective(tooltip, shouldUsePublicHint, hasPu
 
     return iconType == questie.ICON_TYPE_TALK
         or iconType == questie.ICON_TYPE_INTERACT
+end
+
+local function IsHostileObjectiveEnemyTooltip(tooltip, shouldUsePublicHint, hasPublicObjectiveIcon)
+    if type(tooltip) ~= "table" or type(tooltip.questId) ~= "number" then
+        return false
+    end
+
+    if tooltip.type == "NPC" or tooltip.type == "Finisher" then
+        return false
+    end
+
+    local objective = tooltip.objective
+    if type(objective) ~= "table" or type(objective.Update) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(function()
+        objective:Update()
+    end)
+    if not ok or objective.Completed then
+        return false
+    end
+
+    local questie = _G.Questie
+    if type(questie) ~= "table" then
+        return false
+    end
+
+    local iconType = objective.Icon
+    if iconType == questie.ICON_TYPE_TALK
+        or iconType == questie.ICON_TYPE_INTERACT
+        or iconType == questie.ICON_TYPE_INCOMPLETE then
+        return false
+    end
+
+    if shouldUsePublicHint and not hasPublicObjectiveIcon then
+        return false
+    end
+
+    return hasPublicObjectiveIcon
+        or iconType ~= nil
 end
 
 local function ResolveTooltipState(tooltipEntries, shouldUsePublicHint, hasPublicObjectiveIcon)
@@ -434,22 +641,80 @@ local function IsActiveQuestFinisherNpc(npcId)
     return questieState.activeFinisherNpcIds[npcId] == true
 end
 
+local function IsObjectInCurrentZone(objectId, playerZone)
+    if type(objectId) ~= "number" or (type(IsInInstance) == "function" and IsInInstance()) then
+        return true
+    end
+
+    if playerZone == nil or playerZone == 0 then
+        return true
+    end
+
+    local questDb = GetQuestDbModule()
+    if type(questDb) ~= "table" or type(questDb.QueryObjectSingle) ~= "function" then
+        return true
+    end
+
+    local ok, spawns = pcall(questDb.QueryObjectSingle, objectId, "spawns")
+    if not ok or type(spawns) ~= "table" or next(spawns) == nil then
+        return true
+    end
+
+    return spawns[playerZone] ~= nil
+end
+
+local function HasMouseoverActiveObjectObjective()
+    if UnitExists("mouseover") or not GameTooltip or not GameTooltip:IsShown() then
+        return false
+    end
+
+    local name = GetTooltipLine(1)
+    if not name then
+        return false
+    end
+
+    local l10nModule = GetL10nModule()
+    local objectNameLookup = l10nModule and type(l10nModule.objectNameLookup) == "table" and l10nModule.objectNameLookup or nil
+    local objectIds = objectNameLookup and objectNameLookup[name] or nil
+    if type(objectIds) ~= "table" then
+        return false
+    end
+
+    local tooltipModule = GetTooltipModule()
+    local lookupByKey = tooltipModule and type(tooltipModule.lookupByKey) == "table" and tooltipModule.lookupByKey or nil
+    if not lookupByKey then
+        return false
+    end
+
+    local playerZone = GetCurrentZoneId()
+
+    for _, objectId in pairs(objectIds) do
+        if type(objectId) == "number" and IsObjectInCurrentZone(objectId, playerZone) then
+            local tooltipEntries = lookupByKey["o_" .. objectId]
+            if type(tooltipEntries) == "table" then
+                for _, tooltip in pairs(tooltipEntries) do
+                    if IsActiveObjectObjectiveTooltip(tooltip) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 function QuestieIntegration.GetMouseoverNpcQuestState()
     if not RefreshQuestieReadyState() then
         return nil
     end
 
-    local npcId = GetMouseoverNpcId()
+    local npcId, guid, tooltipEntries = GetMouseoverNpcTooltipEntries()
     if not npcId then
         return nil
     end
 
-    local guid = UnitGUID("mouseover")
     local hasPublicObjectiveIcon, shouldUsePublicHint = GetPublicObjectiveIconHint(guid)
-
-    local tooltipModule = GetTooltipModule()
-    local lookupByKey = tooltipModule and type(tooltipModule.lookupByKey) == "table" and tooltipModule.lookupByKey or nil
-    local tooltipEntries = lookupByKey and lookupByKey["m_" .. npcId]
 
     if type(tooltipEntries) == "table" then
         local resolvedState = ResolveTooltipState(tooltipEntries, shouldUsePublicHint, hasPublicObjectiveIcon)
@@ -463,4 +728,33 @@ function QuestieIntegration.GetMouseoverNpcQuestState()
     end
 
     return nil
+end
+
+function QuestieIntegration.IsMouseoverHostileObjectiveEnemy()
+    if not RefreshQuestieReadyState() or not IsHostileMouseoverUnit() then
+        return false
+    end
+
+    local _, guid, tooltipEntries = GetMouseoverNpcTooltipEntries()
+    if type(tooltipEntries) ~= "table" then
+        return false
+    end
+
+    local hasPublicObjectiveIcon, shouldUsePublicHint = GetPublicObjectiveIconHint(guid)
+
+    for _, tooltip in pairs(tooltipEntries) do
+        if IsHostileObjectiveEnemyTooltip(tooltip, shouldUsePublicHint, hasPublicObjectiveIcon) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function QuestieIntegration.IsMouseoverActiveObjectObjective()
+    if not RefreshQuestieReadyState() then
+        return false
+    end
+
+    return HasMouseoverActiveObjectObjective()
 end

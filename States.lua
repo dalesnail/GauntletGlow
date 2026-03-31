@@ -54,6 +54,8 @@ ns.States = {
 
     QUEST_TURN_IN = CreateState("QUEST_TURN_IN"),
 
+    COGWHEEL = CreateState("COGWHEEL"),
+
     FINANCE = CreateState("FINANCE"),
 
     SKINNABLE = CreateState("SKINNABLE"),
@@ -79,14 +81,15 @@ ns.StatePriority = {
     QUEST_TURN_IN = 91,
     QUEST_AVAILABLE = 90.5,
     QUEST_INCOMPLETE = 90.25,
+    COGWHEEL = 90.2,
     FLIGHTMASTER = 90,
+    INNKEEPER = 89,
     BATTLEMASTER = 88,
     REPAIR_VENDOR = 87.5,
     VENDOR = 87,
     TRAINER = 86.75,
     SPEAK = 86.5,
     DIRECTIONS_GUARD = 86,
-    INNKEEPER = 84,
     STABLEMASTER = 83,
     MAILBOX = 82,
     FINANCE = 81.75,

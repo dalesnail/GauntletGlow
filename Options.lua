@@ -62,7 +62,7 @@ local FONT_STYLES = {
 local PAGES = {
     { key = "general", title = "General", subtitle = "Core addon controls and basic troubleshooting options", compactHeader = true },
     { key = "cursors", title = "Cursors", subtitle = "Tweak cursors size and position" },
-    { key = "appearance", title = "Appearance", subtitle = "Global appearance controls for every cursor state" },
+    { key = "appearance", title = "Appearance", subtitle = "Global appearance controls" },
     { key = "effects", title = "Effects", subtitle = "Player-state effects layer over the active cursor glow" },
     { key = "about", title = "About" },
 }
@@ -171,6 +171,12 @@ local CURSOR_STATE_CONFIG = {
         heightKey = "questTurnInSizeY",
         offsetXKey = "questTurnInOffsetX",
         offsetYKey = "questTurnInOffsetY",
+    },
+    COGWHEEL = {
+        widthKey = "cogwheelSizeX",
+        heightKey = "cogwheelSizeY",
+        offsetXKey = "cogwheelOffsetX",
+        offsetYKey = "cogwheelOffsetY",
     },
     FINANCE = {
         widthKey = "bankerSizeX",
@@ -1159,6 +1165,8 @@ local CreateSectionPanel
 local CreateInlineCheckbox
 local SetValueSliderEnabled
 local CreateColorSwatchButton
+local SetInlineCheckboxStableEnabled
+local GetColorPickerRGB
 
 local function BuildGeneralPage(self, page)
     page.enableRow = CreateCheckboxRow(page.body, "Enable", "Master toggle")
@@ -1177,9 +1185,133 @@ local function BuildGeneralPage(self, page)
         page:RefreshControls()
     end)
 
+    page.questieHeader = CreateText(page.body, "GameFontNormal", "Questie", FONT_STYLES.sectionTitle)
+    page.questieHeader:SetPoint("TOPLEFT", page.testModeRow, "BOTTOMLEFT", 0, -18)
+    page.questieHeader:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
+
+    page.questieRow = CreateFrame("Frame", nil, page.body)
+    page.questieRow:SetPoint("TOPLEFT", page.questieHeader, "BOTTOMLEFT", 0, -10)
+    page.questieRow:SetPoint("RIGHT", page.body, "RIGHT", 0, 0)
+    page.questieRow:SetHeight(28)
+
+    page.questieHighlightToggle = CreateInlineCheckbox(page.questieRow, "Highlight")
+    page.questieHighlightToggle:SetPoint("LEFT", page.questieRow, "LEFT", 0, 0)
+    page.questieHighlightToggle:SetWidth(120)
+    page.questieHighlightToggle.check:SetScript("OnClick", function(button)
+        local profile = self:GetQuestieObjectiveEffectProfile()
+        if not profile then
+            return
+        end
+
+        profile.enabled = button:GetChecked() and true or false
+        if self.RefreshPlayerStateEffectTarget then
+            self:RefreshPlayerStateEffectTarget()
+        end
+        page:RefreshControls()
+    end)
+    page.questieHighlightToggle.check:SetScript("OnEnter", function(control)
+        GameTooltip:SetOwner(control, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Color change on quest objectives", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    page.questieHighlightToggle.check:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    page.questieColorSwatch = CreateColorSwatchButton(page.questieRow)
+    page.questieColorSwatch:SetPoint("LEFT", page.questieHighlightToggle, "RIGHT", 8, 0)
+    page.questieColorSwatch:SetScript("OnClick", function()
+        if not self:IsQuestieObjectiveEffectEnabled() or not ColorPickerFrame then
+            return
+        end
+
+        local initialR = self:GetQuestieObjectiveEffectValue("colorR") or 1
+        local initialG = self:GetQuestieObjectiveEffectValue("colorG") or 1
+        local initialB = self:GetQuestieObjectiveEffectValue("colorB") or 1
+
+        local function ApplyPickerColor(colorData)
+            local r, g, b = GetColorPickerRGB(colorData)
+            if r == nil or g == nil or b == nil then
+                return
+            end
+
+            local profile = self:GetQuestieObjectiveEffectProfile()
+            if not profile then
+                return
+            end
+
+            profile.colorR = r
+            profile.colorG = g
+            profile.colorB = b
+            if self.RefreshPlayerStateEffectTarget then
+                self:RefreshPlayerStateEffectTarget()
+            end
+            page:RefreshControls()
+        end
+
+        local function CancelPickerColor(previousValues)
+            local r, g, b = GetColorDataRGB(previousValues)
+            if r == nil or g == nil or b == nil then
+                r, g, b = initialR, initialG, initialB
+            end
+
+            local profile = self:GetQuestieObjectiveEffectProfile()
+            if not profile then
+                return
+            end
+
+            profile.colorR = r
+            profile.colorG = g
+            profile.colorB = b
+            if self.RefreshPlayerStateEffectTarget then
+                self:RefreshPlayerStateEffectTarget()
+            end
+            page:RefreshControls()
+        end
+
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            local info = {}
+            info.r = initialR
+            info.g = initialG
+            info.b = initialB
+            info.hasOpacity = false
+            info.swatchFunc = function(...)
+                ApplyPickerColor(select(1, ...))
+            end
+            info.cancelFunc = function(previousValues)
+                CancelPickerColor(previousValues)
+            end
+            ColorPickerFrame:SetupColorPickerAndShow(info)
+            return
+        end
+
+        ColorPickerFrame.func = function(...)
+            ApplyPickerColor(select(1, ...))
+        end
+        ColorPickerFrame.opacityFunc = nil
+        ColorPickerFrame.cancelFunc = function(previousValues)
+            CancelPickerColor(previousValues)
+        end
+        ColorPickerFrame.hasOpacity = false
+        ColorPickerFrame.opacity = 1
+        ColorPickerFrame.previousValues = { r = initialR, g = initialG, b = initialB }
+        ColorPickerFrame:SetColorRGB(initialR, initialG, initialB)
+        ColorPickerFrame:Hide()
+        ColorPickerFrame:Show()
+    end)
+
     page.RefreshControls = function(currentPage)
+        local questieEnabled = self:IsQuestieObjectiveEffectEnabled()
+        local questieColorR = self:GetQuestieObjectiveEffectValue("colorR") or 1
+        local questieColorG = self:GetQuestieObjectiveEffectValue("colorG") or 1
+        local questieColorB = self:GetQuestieObjectiveEffectValue("colorB") or 1
+
         currentPage.enableRow.check:SetChecked(GetAddonEnabled(self))
         currentPage.testModeRow.check:SetChecked(GetTestModeEnabled(self))
+        currentPage.questieHighlightToggle.check:SetChecked(questieEnabled)
+        SetInlineCheckboxStableEnabled(currentPage.questieHighlightToggle, true)
+        currentPage.questieColorSwatch:SetSwatchColor(questieColorR, questieColorG, questieColorB)
+        currentPage.questieColorSwatch:SetEnabledState(questieEnabled)
     end
 end
 
@@ -1334,6 +1466,31 @@ local function SetAppearanceGlobalAlpha(self, value)
     RefreshAppearance(self)
 end
 
+local function GetAppearanceBlendMode(self)
+    local profile = GetAppearanceProfile(self)
+    local blendMode = profile and profile.blendMode or "GLOW"
+    if blendMode == "OPAQUE" then
+        return "OPAQUE"
+    end
+
+    return "GLOW"
+end
+
+local function SetAppearanceBlendMode(self, blendMode)
+    local profile = GetAppearanceProfile(self)
+    if not profile then
+        return
+    end
+
+    if blendMode ~= "OPAQUE" then
+        blendMode = "GLOW"
+    end
+
+    profile.blendMode = blendMode
+
+    RefreshAppearance(self)
+end
+
 CreateInlineCheckbox = function(parent, title)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(26)
@@ -1364,7 +1521,7 @@ local function SetInlineCheckboxEnabled(row, enabled)
     row:SetAlpha(enabled and 1 or 0.6)
 end
 
-local function SetInlineCheckboxStableEnabled(row, enabled)
+SetInlineCheckboxStableEnabled = function(row, enabled)
     if not row then
         return
     end
@@ -1481,7 +1638,7 @@ local function GetColorDataRGB(colorData)
     return nil
 end
 
-local function GetColorPickerRGB(colorData)
+GetColorPickerRGB = function(colorData)
     local r, g, b = GetColorDataRGB(colorData)
     if r ~= nil and g ~= nil and b ~= nil then
         return r, g, b
@@ -2027,6 +2184,11 @@ local function BuildAppearancePage(self, page)
         return tonumber(string.format("%.2f", roundedValue))
     end
 
+    local blendModeOptions = {
+        { value = "GLOW", text = "Glow" },
+        { value = "OPAQUE", text = "Opaque" },
+    }
+
     local sectionGap = 12
     local introGap = 18
     local sectionBottomPadding = 12
@@ -2041,7 +2203,9 @@ local function BuildAppearancePage(self, page)
         local viewportHeight = math.max(page.scrollFrame:GetHeight(), 1)
         page.scrollContent:SetWidth(contentWidth)
 
-        local totalHeight = page.recolorSection:GetHeight()
+        local totalHeight = page.blendModeRow:GetHeight()
+            + introGap
+            + page.recolorSection:GetHeight()
             + sectionGap
             + page.brightnessSection:GetHeight()
             + sectionGap
@@ -2062,9 +2226,58 @@ local function BuildAppearancePage(self, page)
     page.scrollFrame:SetScript("OnSizeChanged", UpdateAppearanceScrollLayout)
     page:SetScript("OnShow", UpdateAppearanceScrollLayout)
 
+    page.blendModeRow = CreateFrame("Frame", nil, page.scrollContent)
+    page.blendModeRow:SetPoint("TOPLEFT", page.scrollContent, "TOPLEFT", 0, 0)
+    page.blendModeRow:SetPoint("TOPRIGHT", page.scrollContent, "TOPRIGHT", 0, 0)
+    page.blendModeRow:SetHeight(28)
+
+    page.blendModeLabel = CreateText(page.blendModeRow, "GameFontNormal", "Blend Mode", FONT_STYLES.sectionTitle)
+    page.blendModeLabel:SetPoint("LEFT", page.blendModeRow, "LEFT", 0, -1)
+    page.blendModeLabel:SetWidth(90)
+    page.blendModeLabel:SetJustifyV("MIDDLE")
+
+    page.blendModeDropdown = CreateCompactDropdown(page.blendModeRow, 140)
+    page.blendModeDropdown:SetPoint("LEFT", page.blendModeLabel, "RIGHT", -2, 1)
+
+    local function SetSelectedBlendMode(blendMode)
+        local selectedText = "Glow"
+        if blendMode == "OPAQUE" then
+            selectedText = "Opaque"
+        end
+
+        if UIDropDownMenu_SetSelectedValue then
+            UIDropDownMenu_SetSelectedValue(page.blendModeDropdown, blendMode)
+        end
+
+        if UIDropDownMenu_SetText then
+            UIDropDownMenu_SetText(page.blendModeDropdown, selectedText)
+        end
+    end
+
+    if UIDropDownMenu_Initialize then
+        UIDropDownMenu_Initialize(page.blendModeDropdown, function(_, level)
+            if level ~= 1 then
+                return
+            end
+
+            for _, option in ipairs(blendModeOptions) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = option.text
+                info.value = option.value
+                info.checked = GetAppearanceBlendMode(self) == option.value
+                info.func = function(button)
+                    SetAppearanceBlendMode(self, button.value)
+                    SetSelectedBlendMode(button.value)
+                    page:RefreshControls()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+    end
+
     page.recolorSection = CreateSectionPanel(page.scrollContent, "Color", "")
-    page.recolorSection:SetPoint("TOPLEFT", page.scrollContent, "TOPLEFT", 0, 0)
-    page.recolorSection:SetPoint("TOPRIGHT", page.scrollContent, "TOPRIGHT", 0, 0)
+    page.recolorSection:SetPoint("TOPLEFT", page.blendModeRow, "BOTTOMLEFT", 0, -introGap)
+    page.recolorSection:SetPoint("TOPRIGHT", page.blendModeRow, "BOTTOMRIGHT", 0, -introGap)
     page.recolorSection:SetHeight(126)
     page.recolorSection.bodyText:SetText("")
     page.recolorSection.bodyText:Hide()
@@ -2176,7 +2389,9 @@ local function BuildAppearancePage(self, page)
         local brightness = RoundAppearanceValue(GetAppearanceBrightness(self), 0.05)
         local useGlobalAlpha = GetAppearanceGlobalAlphaEnabled(self)
         local globalAlpha = RoundAppearanceValue(GetAppearanceGlobalAlpha(self), 0.05)
+        local blendMode = GetAppearanceBlendMode(self)
 
+        SetSelectedBlendMode(blendMode)
         currentPage.customColorToggle.check:SetChecked(useCustomColor)
         currentPage.colorSwatch:SetSwatchColor(colorR, colorG, colorB)
         currentPage.colorSwatch:SetEnabledState(useCustomColor)

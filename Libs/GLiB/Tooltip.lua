@@ -174,8 +174,15 @@ P.tooltipWorldTags = {
             ["[++] Herbalism"] = true,
             ["[+++] Herbalism"] = true,
             ["[-] Herbalism"] = true,
+            ["[+] Requires Herbalism"] = true,
+            ["[++] Requires Herbalism"] = true,
+            ["[+++] Requires Herbalism"] = true,
+            ["[-] Requires Herbalism"] = true,
         },
-        contains = {},
+        contains = {
+            "requires herbalism",
+            "herbalism required",
+        },
     },
 
     mining = {
@@ -187,7 +194,14 @@ P.tooltipWorldTags = {
             ["[++] Mining"] = true,
             ["[+++] Mining"] = true,
             ["[-] Mining"] = true,
+            ["[+] Requires Mining"] = true,
+            ["[++] Requires Mining"] = true,
+            ["[+++] Requires Mining"] = true,
+            ["[-] Requires Mining"] = true,
         },
-        contains = {},
+        contains = {
+            "requires mining",
+            "mining required",
+        },
     },
 }

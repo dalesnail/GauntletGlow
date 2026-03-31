@@ -13,7 +13,9 @@ GLiB._p = P
 local strtrim = strtrim
 local lower = string.lower
 local strfind = string.find
+local gsub = string.gsub
 local ipairs = ipairs
+local pairs = pairs
 local type = type
 
 local function norm(value)
@@ -30,6 +32,56 @@ local function norm(value)
 end
 
 P.norm = norm
+
+local function tooltipNorm(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    value = gsub(value, "|c%x%x%x%x%x%x%x%x", "")
+    value = gsub(value, "|r", "")
+    value = gsub(value, "|T.-|t", " ")
+    value = gsub(value, "%s+", " ")
+
+    return norm(value)
+end
+
+local function GetNormalizedTooltipCategory(categoryData)
+    if not categoryData then
+        return nil
+    end
+
+    local normalized = rawget(categoryData, "__normalized")
+    if normalized then
+        return normalized
+    end
+
+    normalized = {
+        exact = {},
+        contains = {},
+    }
+
+    if type(categoryData.exact) == "table" then
+        for keyword in pairs(categoryData.exact) do
+            local normalizedKeyword = tooltipNorm(keyword)
+            if normalizedKeyword then
+                normalized.exact[normalizedKeyword] = true
+            end
+        end
+    end
+
+    if type(categoryData.contains) == "table" then
+        for _, keyword in ipairs(categoryData.contains) do
+            local normalizedKeyword = tooltipNorm(keyword)
+            if normalizedKeyword then
+                normalized.contains[#normalized.contains + 1] = normalizedKeyword
+            end
+        end
+    end
+
+    categoryData.__normalized = normalized
+    return normalized
+end
 
 function GLiB:Ver()
     return self.version
@@ -118,15 +170,21 @@ local function tooltipLinesMatch(lines, categoryData)
         return false
     end
 
+    local normalizedCategory = GetNormalizedTooltipCategory(categoryData)
+    if not normalizedCategory then
+        return false
+    end
+
     for _, line in ipairs(lines) do
-        if type(line) == "string" and line ~= "" then
-            if categoryData.exact and categoryData.exact[line] then
+        local normalizedLine = tooltipNorm(line)
+        if normalizedLine then
+            if normalizedCategory.exact and normalizedCategory.exact[normalizedLine] then
                 return true
             end
 
-            if categoryData.contains then
-                for _, keyword in ipairs(categoryData.contains) do
-                    if strfind(line, keyword, 1, true) then
+            if normalizedCategory.contains then
+                for _, keyword in ipairs(normalizedCategory.contains) do
+                    if strfind(normalizedLine, keyword, 1, true) then
                         return true
                     end
                 end

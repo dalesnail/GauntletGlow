@@ -188,8 +188,10 @@ local registry = {
         cogwheel = {
             file = "cogwheel_glow.png",
             optionLabel = "Cogwheel",
-            states = {},
-            active = false,
+            states = { "COGWHEEL" },
+            primaryState = "COGWHEEL",
+            sharedDefaultsState = "COGWHEEL",
+            active = true,
         },
         engineer = {
             file = "engineer.png",
