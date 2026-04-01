@@ -37,6 +37,8 @@ local ipairs = ipairs
 local type = type
 local math = math
 local table = table
+local string = string
+local GetMouseFoci = GetMouseFoci
 
 local Tooltip = ns.Tooltip
 local QuestieIntegration = ns.QuestieIntegration
@@ -44,6 +46,17 @@ local QuestieIntegration = ns.QuestieIntegration
 local FIND_HERBS_SPELL_ID = 2383
 local FIND_MINERALS_SPELL_ID = 2580
 local BOOKTYPE_SPELL = BOOKTYPE_SPELL
+
+-- STALE TOOLTIP SUPPRESSION (START)
+local ENABLE_STICKY_HOVER_STALE_TOOLTIP_SUPPRESSION = true
+local STICKY_HOVER_SOURCE_MAILBOX = "MAILBOX"
+local STICKY_HOVER_SOURCE_WORLD_HERBALISM = "WORLD_HERBALISM"
+local STICKY_HOVER_SOURCE_WORLD_MINING = "WORLD_MINING"
+local STICKY_HOVER_SOURCE_CORPSE_HERBALISM = "CORPSE_HERBALISM"
+local STICKY_HOVER_SOURCE_CORPSE_MINING = "CORPSE_MINING"
+-- STALE TOOLTIP SUPPRESSION (END)
+
+local AddTriggerCandidate
 
 -- ############################################################
 -- GLiB Helpers
@@ -549,6 +562,28 @@ local function IsCorpseProfessionWorldTag(lines, tag)
     return IsPostLootGatherable(lines) and HasTooltipWorldTag(lines, tag)
 end
 
+local function TooltipMatchesWorldGatheringTag(name, lines, tag)
+    local hasWorldTag = HasTooltipWorldTag(lines, tag)
+
+    if IsMouseoverCorpse() or TooltipDisplaysUnit() or not name or name == "" or not lines or #lines == 0 then
+        return false
+    end
+
+    return hasWorldTag
+end
+
+local function GetWorldGatheringCandidate(name, lines)
+    if TooltipMatchesWorldGatheringTag(name, lines, "herbalism") then
+        return "HERBALISM", STICKY_HOVER_SOURCE_WORLD_HERBALISM
+    end
+
+    if TooltipMatchesWorldGatheringTag(name, lines, "mining") then
+        return "MINING", STICKY_HOVER_SOURCE_WORLD_MINING
+    end
+
+    return nil, nil
+end
+
 local function IsHerbalismCorpse(lines)
     return IsCorpseProfessionWorldTag(lines, "herbalism") and PlayerHasHerbalism()
 end
@@ -567,6 +602,18 @@ local function GetCorpseProfessionState(lines)
     end
 
     return nil
+end
+
+local function GetCorpseProfessionCandidate(lines)
+    if IsHerbalismCorpse(lines) then
+        return "HERBALISM", STICKY_HOVER_SOURCE_CORPSE_HERBALISM
+    end
+
+    if IsMiningCorpse(lines) then
+        return "MINING", STICKY_HOVER_SOURCE_CORPSE_MINING
+    end
+
+    return nil, nil
 end
 
 local function AddTooltipRoleCandidates(candidates, lines, name)
@@ -628,7 +675,7 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
     end
 
     if glibType == "mailbox" then
-        table.insert(candidates, "MAILBOX")
+        AddTriggerCandidate(candidates, "MAILBOX", STICKY_HOVER_SOURCE_MAILBOX)
     end
 
     if glibType == "finance" then
@@ -648,13 +695,17 @@ local function AddTooltipRoleCandidates(candidates, lines, name)
     end
 end
 
-local function AddWorldTooltipCandidates(candidates, lines)
-    if not IsMouseoverCorpse() and HasTooltipWorldTag(lines, "herbalism") then
-        table.insert(candidates, "HERBALISM")
+local function AddWorldTooltipCandidates(candidates, lines, name)
+    local state, sourceKey = GetWorldGatheringCandidate(name, lines)
+    if state then
+        AddTriggerCandidate(candidates, state, sourceKey)
     end
+end
 
-    if not IsMouseoverCorpse() and HasTooltipWorldTag(lines, "mining") then
-        table.insert(candidates, "MINING")
+local function AddCorpseGatheringCandidates(candidates, lines)
+    local state, sourceKey = GetCorpseProfessionCandidate(lines)
+    if state then
+        AddTriggerCandidate(candidates, state, sourceKey)
     end
 end
 
@@ -702,6 +753,340 @@ local PLAYER_STATE_EFFECT_CHECKS = {
     RESTING = IsPlayerRestingState,
 }
 
+-- STALE TOOLTIP SUPPRESSION (START)
+local function IsMailboxStickyHoverStillValidWithoutTooltip()
+    if UnitExists("mouseover") then
+        return false
+    end
+
+    if type(GetMouseFoci) ~= "function" then
+        return false
+    end
+
+    local foci = GetMouseFoci()
+    if not foci or type(foci) ~= "table" then
+        return false
+    end
+
+    for _, focus in ipairs(foci) do
+        local name = focus and focus.GetName and focus:GetName()
+        if name and name ~= "" and string.find(string.lower(name), "mail", 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function TooltipMatchesMailboxStickyHoverSource(name)
+    local glibType = nil
+
+    if name and name ~= "" then
+        glibType = GetGLiBObjType(name)
+    end
+
+    return glibType == "mailbox"
+end
+
+local function TooltipMatchesWorldHerbalismStickyHoverSource(name, lines)
+    return TooltipMatchesWorldGatheringTag(name, lines, "herbalism")
+end
+
+local function TooltipMatchesWorldMiningStickyHoverSource(name, lines)
+    return TooltipMatchesWorldGatheringTag(name, lines, "mining")
+end
+
+local function TooltipMatchesCorpseHerbalismStickyHoverSource(_, lines)
+    return IsCorpseProfessionWorldTag(lines, "herbalism") and PlayerHasHerbalism()
+end
+
+local function TooltipMatchesCorpseMiningStickyHoverSource(_, lines)
+    return IsCorpseProfessionWorldTag(lines, "mining") and PlayerHasMining()
+end
+
+local function IsWorldHerbalismStickyHoverStillValidWithoutTooltip()
+    return false
+end
+
+local function IsWorldMiningStickyHoverStillValidWithoutTooltip()
+    return false
+end
+
+local function IsCorpseHerbalismStickyHoverStillValidWithoutTooltip()
+    return false
+end
+
+local function IsCorpseMiningStickyHoverStillValidWithoutTooltip()
+    return false
+end
+
+local STICKY_HOVER_SOURCES = {
+    [STICKY_HOVER_SOURCE_MAILBOX] = {
+        state = "MAILBOX",
+        isStillValidWithoutTooltip = IsMailboxStickyHoverStillValidWithoutTooltip,
+        tooltipMatches = TooltipMatchesMailboxStickyHoverSource,
+    },
+    [STICKY_HOVER_SOURCE_WORLD_HERBALISM] = {
+        state = "HERBALISM",
+        isStillValidWithoutTooltip = IsWorldHerbalismStickyHoverStillValidWithoutTooltip,
+        tooltipMatches = TooltipMatchesWorldHerbalismStickyHoverSource,
+    },
+    [STICKY_HOVER_SOURCE_WORLD_MINING] = {
+        state = "MINING",
+        isStillValidWithoutTooltip = IsWorldMiningStickyHoverStillValidWithoutTooltip,
+        tooltipMatches = TooltipMatchesWorldMiningStickyHoverSource,
+    },
+    [STICKY_HOVER_SOURCE_CORPSE_HERBALISM] = {
+        state = "HERBALISM",
+        isStillValidWithoutTooltip = IsCorpseHerbalismStickyHoverStillValidWithoutTooltip,
+        tooltipMatches = TooltipMatchesCorpseHerbalismStickyHoverSource,
+    },
+    [STICKY_HOVER_SOURCE_CORPSE_MINING] = {
+        state = "MINING",
+        isStillValidWithoutTooltip = IsCorpseMiningStickyHoverStillValidWithoutTooltip,
+        tooltipMatches = TooltipMatchesCorpseMiningStickyHoverSource,
+    },
+}
+
+local function GetStickyHoverSource(sourceKey)
+    return sourceKey and STICKY_HOVER_SOURCES[sourceKey] or nil
+end
+
+local function GetStickyHoverSourceState(sourceKey)
+    local sourceData = GetStickyHoverSource(sourceKey)
+    return sourceData and sourceData.state or nil
+end
+
+local function GetStickyHoverSuppressionFamily(sourceKey)
+    if sourceKey == STICKY_HOVER_SOURCE_WORLD_HERBALISM or sourceKey == STICKY_HOVER_SOURCE_CORPSE_HERBALISM then
+        return "HERBALISM"
+    end
+
+    if sourceKey == STICKY_HOVER_SOURCE_WORLD_MINING or sourceKey == STICKY_HOVER_SOURCE_CORPSE_MINING then
+        return "MINING"
+    end
+
+    return sourceKey
+end
+
+local function IsCorpseStickyHoverSource(sourceKey)
+    return sourceKey == STICKY_HOVER_SOURCE_CORPSE_HERBALISM
+        or sourceKey == STICKY_HOVER_SOURCE_CORPSE_MINING
+end
+
+local function IsGatheringStickySource(sourceKey)
+    local family = GetStickyHoverSuppressionFamily(sourceKey)
+    return family == "HERBALISM" or family == "MINING"
+end
+
+local function IsStickyHoverSourceStillValidWithoutTooltip(sourceKey)
+    local sourceData = GetStickyHoverSource(sourceKey)
+    local validator = sourceData and sourceData.isStillValidWithoutTooltip
+
+    if type(validator) ~= "function" then
+        return false
+    end
+
+    return validator()
+end
+
+local function TooltipMatchesStickyHoverSource(sourceKey, name, lines)
+    local sourceData = GetStickyHoverSource(sourceKey)
+    local matcher = sourceData and sourceData.tooltipMatches
+
+    if type(matcher) ~= "function" then
+        return false
+    end
+
+    return matcher(name, lines)
+end
+
+local function CreateTriggerCandidate(state, sourceKey)
+    if not sourceKey then
+        return state
+    end
+
+    return {
+        state = state,
+        sourceKey = sourceKey,
+    }
+end
+
+local function GetTriggerCandidateState(candidate)
+    if type(candidate) == "table" then
+        return candidate.state
+    end
+
+    return candidate
+end
+
+local function GetTriggerCandidateSourceKey(candidate)
+    if type(candidate) == "table" then
+        return candidate.sourceKey
+    end
+
+    return nil
+end
+
+local function IsTriggerCandidateSuppressed(candidate, suppressedSourceKey)
+    if not suppressedSourceKey then
+        return false
+    end
+
+    return GetStickyHoverSuppressionFamily(GetTriggerCandidateSourceKey(candidate))
+        == GetStickyHoverSuppressionFamily(suppressedSourceKey)
+end
+
+AddTriggerCandidate = function(candidates, state, sourceKey)
+    table.insert(candidates, CreateTriggerCandidate(state, sourceKey))
+end
+
+local function ShouldKeepGatheringSuppression(self, tooltipName)
+    local suppressedSourceKey = self and self.staleTooltipSuppressKey
+    if not IsGatheringStickySource(suppressedSourceKey) then
+        return false
+    end
+
+    if not tooltipName or tooltipName == "" then
+        return false
+    end
+
+    return self.staleTooltipSuppressName == tooltipName
+end
+
+local function SetStaleTooltipSuppressKey(self, sourceKey, reason)
+    local previousSourceKey = self.staleTooltipSuppressKey
+
+    if previousSourceKey == sourceKey then
+        return
+    end
+
+    self.staleTooltipSuppressKey = sourceKey
+    self.staleTooltipSuppressName = nil
+
+    if IsGatheringStickySource(sourceKey) then
+        local tooltipName = Tooltip and Tooltip:GetName()
+        if tooltipName and tooltipName ~= "" then
+            self.staleTooltipSuppressName = tooltipName
+        end
+    end
+end
+
+local function RefreshGatheringSuppression(self, tooltipName, reason)
+    if not IsGatheringStickySource(self and self.staleTooltipSuppressKey) then
+        return
+    end
+
+    if ShouldKeepGatheringSuppression(self, tooltipName) then
+        return
+    end
+
+    SetStaleTooltipSuppressKey(self, nil, reason)
+end
+
+local function RecoverFreshCorpseGatheringRehover(self, lines)
+    local suppressedSourceKey = self and self.staleTooltipSuppressKey
+    if not IsCorpseStickyHoverSource(suppressedSourceKey) then
+        return false
+    end
+
+    if not UnitExists("mouseover") or not UnitIsDeadOrGhost("mouseover") or CanLootMouseoverCorpse() then
+        return false
+    end
+
+    local corpseState, corpseSourceKey = GetCorpseProfessionCandidate(lines)
+    if not corpseState or corpseSourceKey ~= suppressedSourceKey then
+        return false
+    end
+
+    SetStaleTooltipSuppressKey(self, nil, "fresh-corpse-rehover")
+    return true
+end
+
+local function AddCandidatesWithStickySourceSuppression(self, candidates, lines, name, addCandidates)
+    local suppressedSourceKey = self.staleTooltipSuppressKey
+
+    if not suppressedSourceKey then
+        addCandidates(candidates, lines, name)
+        return
+    end
+
+    local filteredCandidates = {}
+
+    addCandidates(filteredCandidates, lines, name)
+
+    for _, candidate in ipairs(filteredCandidates) do
+        if not IsTriggerCandidateSuppressed(candidate, suppressedSourceKey) then
+            table.insert(candidates, candidate)
+        end
+    end
+end
+
+function GG:SetCurrentStickySourceKey(sourceKey)
+    if self.currentStickySourceKey == sourceKey then
+        return
+    end
+
+    self.currentStickySourceKey = sourceKey
+end
+
+function GG:CURSOR_CHANGED()
+    if not ENABLE_STICKY_HOVER_STALE_TOOLTIP_SUPPRESSION then
+        return
+    end
+
+    local beforeState = self.currentStateName
+    local activeSourceKey = self.currentStickySourceKey
+
+    if activeSourceKey then
+        local sourceStillValid = IsStickyHoverSourceStillValidWithoutTooltip(activeSourceKey)
+        local afterState = beforeState
+
+        if not sourceStillValid then
+            afterState = "DEFAULT"
+            SetStaleTooltipSuppressKey(self, activeSourceKey, "cursor-changed")
+            self:SetCurrentStickySourceKey(nil)
+
+            if beforeState ~= afterState then
+                self:ApplyState(afterState)
+            end
+        end
+        return
+    end
+
+    if self.staleTooltipSuppressKey then
+        local name = Tooltip and Tooltip:GetName()
+        local lines = Tooltip and Tooltip:GetLines()
+
+        if name then
+            name = strtrim(name)
+        end
+
+        if TooltipMatchesStickyHoverSource(self.staleTooltipSuppressKey, name, lines) then
+            SetStaleTooltipSuppressKey(self, nil, "rehover")
+        end
+    end
+end
+
+function GG:UPDATE_MOUSEOVER_UNIT()
+    local activeSourceKey = self.currentStickySourceKey
+    if not IsCorpseStickyHoverSource(activeSourceKey) then
+        return
+    end
+
+    if UnitExists("mouseover") then
+        return
+    end
+
+    SetStaleTooltipSuppressKey(self, activeSourceKey, "mouseover-loss")
+    self:SetCurrentStickySourceKey(nil)
+
+    if self.currentStateName ~= "DEFAULT" then
+        self:ApplyState("DEFAULT")
+    end
+end
+-- STALE TOOLTIP SUPPRESSION (END)
+
 -- ############################################################
 -- TRIGGER LOOP
 -- ############################################################
@@ -713,14 +1098,27 @@ function GG:StartTriggerLoop()
 
     local f = CreateFrame("Frame")
 
+    -- STALE TOOLTIP SUPPRESSION (START)
+    f:RegisterEvent("CURSOR_CHANGED")
+    f:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+    f:SetScript("OnEvent", function(_, event, ...)
+        if type(self[event]) == "function" then
+            self[event](self, ...)
+        end
+    end)
+    -- STALE TOOLTIP SUPPRESSION (END)
+
     f:SetScript("OnUpdate", function()
-        local visible, state = self:EvaluateTrigger()
+        local visible, state, stickySourceKey = self:EvaluateTrigger()
         self:UpdatePlayerStateEffect()
 
         self:ApplyVisibility(visible)
 
         if visible and state then
+            self:SetCurrentStickySourceKey(stickySourceKey)
             self:ApplyState(state)
+        else
+            self:SetCurrentStickySourceKey(nil)
         end
     end)
 
@@ -733,18 +1131,21 @@ end
 
 function GG:ResolveState(candidates)
     local bestState = nil
+    local bestSourceKey = nil
     local bestPriority = -math.huge
 
-    for _, state in ipairs(candidates) do
+    for _, candidate in ipairs(candidates) do
+        local state = GetTriggerCandidateState(candidate)
         local priority = ns.StatePriority[state] or 0
 
         if priority > bestPriority then
             bestPriority = priority
             bestState = state
+            bestSourceKey = GetTriggerCandidateSourceKey(candidate)
         end
     end
 
-    return bestState
+    return bestState, bestSourceKey
 end
 
 function GG:ResolvePlayerStateEffect()
@@ -812,7 +1213,7 @@ end
 function GG:EvaluateTrigger()
     if self.db.profile.testMode then
         self:SetQuestieObjectiveHoverActive(false)
-        return true, "DEFAULT"
+        return true, "DEFAULT", nil
     end
 
     if IsMouseButtonDown("RightButton") or IsMouseButtonDown("LeftButton") then
@@ -829,12 +1230,15 @@ function GG:EvaluateTrigger()
         name = strtrim(name)
     end
 
-    AddWorldTooltipCandidates(candidates, lines)
-    AddTooltipRoleCandidates(candidates, lines, name)
+    RefreshGatheringSuppression(self, name, "evaluate")
+    RecoverFreshCorpseGatheringRehover(self, lines)
+
+    AddCandidatesWithStickySourceSuppression(self, candidates, lines, name, AddWorldTooltipCandidates)
+    AddCandidatesWithStickySourceSuppression(self, candidates, lines, name, AddTooltipRoleCandidates)
 
     local questieState = QuestieIntegration and QuestieIntegration.GetMouseoverNpcQuestState and QuestieIntegration.GetMouseoverNpcQuestState()
     if questieState then
-        table.insert(candidates, questieState)
+        AddTriggerCandidate(candidates, questieState)
     end
 
     local questieObjectObjectiveActive = QuestieIntegration
@@ -842,7 +1246,7 @@ function GG:EvaluateTrigger()
         and QuestieIntegration.IsMouseoverActiveObjectObjective()
         or false
     if questieObjectObjectiveActive then
-        table.insert(candidates, "COGWHEEL")
+        AddTriggerCandidate(candidates, "COGWHEEL")
     end
 
     local questieObjectiveHoverActive = QuestieIntegration
@@ -852,15 +1256,15 @@ function GG:EvaluateTrigger()
     self:SetQuestieObjectiveHoverActive(questieObjectiveHoverActive)
 
     if IsRepairModeActive() then
-        table.insert(candidates, "REPAIR_HOVER")
+        AddTriggerCandidate(candidates, "REPAIR_HOVER")
     end
 
     if GetHoveredMerchantItemIndex() then
-        table.insert(candidates, "LOOT")
+        AddTriggerCandidate(candidates, "LOOT")
     end
 
     if GetHoveredBagItem() then
-        table.insert(candidates, "SELL_ITEM")
+        AddTriggerCandidate(candidates, "SELL_ITEM")
     end
 
     if UnitExists("mouseover") and not UnitIsUnit("mouseover", "player") then
@@ -873,7 +1277,6 @@ function GG:EvaluateTrigger()
         if UnitIsDeadOrGhost("mouseover") then
             local timestamp = guid and self.lootedUnits[guid]
             local wasRecentlyLooted = timestamp and (GetTime() - timestamp < 120)
-            local corpseProfessionState = GetCorpseProfessionState(lines)
             local canLootCorpse = CanLootMouseoverCorpse()
 
             if canLootCorpse and not wasRecentlyLooted then
@@ -881,22 +1284,29 @@ function GG:EvaluateTrigger()
                 local modifier = IsModifiedClick("AUTOLOOTTOGGLE")
                 local isAutoLoot = (autoLoot and not modifier) or (not autoLoot and modifier)
 
-                table.insert(candidates, isAutoLoot and "AUTOLOOT" or "LOOT")
-            elseif corpseProfessionState then
-                table.insert(candidates, corpseProfessionState)
+                AddTriggerCandidate(candidates, isAutoLoot and "AUTOLOOT" or "LOOT")
             else
-                table.insert(candidates, "DEFAULT")
+                local corpseCandidates = {}
+                AddCandidatesWithStickySourceSuppression(self, corpseCandidates, lines, name, AddCorpseGatheringCandidates)
+
+                if #corpseCandidates > 0 then
+                    for _, candidate in ipairs(corpseCandidates) do
+                        table.insert(candidates, candidate)
+                    end
+                else
+                    AddTriggerCandidate(candidates, "DEFAULT")
+                end
             end
         end
 
         if UnitExists("mouseover") and not UnitIsDeadOrGhost("mouseover") and UnitCanAttack("player", "mouseover") then
-            table.insert(candidates, "ATTACK")
+            AddTriggerCandidate(candidates, "ATTACK")
         end
     end
 
-    local best = self:ResolveState(candidates)
+    local best, stickySourceKey = self:ResolveState(candidates)
 
-    return true, best or "DEFAULT"
+    return true, best or "DEFAULT", stickySourceKey
 end
 
 function GG:MERCHANT_SHOW()
