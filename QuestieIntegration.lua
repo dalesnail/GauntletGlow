@@ -307,6 +307,24 @@ local function GetMouseoverNpcTooltipEntries()
     return npcId, guid, tooltipEntries
 end
 
+local function GetQuestieQuestGiverCandidateUnit()
+    if not UnitExists("mouseover") or UnitIsDeadOrGhost("mouseover") or UnitCanAttack("player", "mouseover") then
+        return nil, nil
+    end
+
+    local guid = UnitGUID("mouseover")
+    if not guid then
+        return nil, nil
+    end
+
+    local unitType, _, _, _, _, npcId = strsplit("-", guid)
+    if unitType ~= "Creature" and unitType ~= "Vehicle" then
+        return nil, nil
+    end
+
+    return tonumber(npcId), guid
+end
+
 local function GetCurrentZoneId()
     local playerModule = GetPlayerModule()
     if type(playerModule) ~= "table" or type(playerModule.GetCurrentZoneId) ~= "function" then
@@ -709,10 +727,14 @@ function QuestieIntegration.GetMouseoverNpcQuestState()
         return nil
     end
 
-    local npcId, guid, tooltipEntries = GetMouseoverNpcTooltipEntries()
-    if not npcId then
+    local npcId, guid = GetQuestieQuestGiverCandidateUnit()
+    if not npcId or not guid then
         return nil
     end
+
+    local tooltipModule = GetTooltipModule()
+    local lookupByKey = tooltipModule and type(tooltipModule.lookupByKey) == "table" and tooltipModule.lookupByKey or nil
+    local tooltipEntries = lookupByKey and lookupByKey["m_" .. npcId] or nil
 
     local hasPublicObjectiveIcon, shouldUsePublicHint = GetPublicObjectiveIconHint(guid)
 
